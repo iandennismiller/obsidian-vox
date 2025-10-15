@@ -194,18 +194,25 @@ Since whisper.cpp returns segments as objects with a `text` property, this code 
 
 ## Testing Strategy
 
-1. **Manual Testing**
+1. **Quick Testing with Mock Server** (Recommended for Development)
+   - Start the mock server: `node project/mock-whisper-server.js`
+   - Configure the plugin to use `http://127.0.0.1:8081`
+   - Test with any audio file - mock returns consistent data
+   - Verify output markdown is correct
+   - No whisper.cpp installation required!
+
+2. **Manual Testing with Real whisper.cpp** (For Production Validation)
    - Set up a local whisper.cpp server
    - Configure the plugin to use the self-hosted endpoint
    - Test with various audio files
-   - Verify output markdown is correct
+   - Verify transcription quality and output markdown
 
-2. **Error Handling**
+3. **Error Handling**
    - Test with server offline
    - Test with invalid audio files
    - Test with timeout scenarios
 
-3. **Backwards Compatibility** (if needed)
+4. **Backwards Compatibility** (if needed)
    - Test with the old API format
    - Ensure the code handles both response types
 

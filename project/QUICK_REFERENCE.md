@@ -225,7 +225,12 @@ The method body stays the same - it already handles object-format segments!
 
 ## Testing Checklist
 
-### Setup
+### Option 1: Mock Server (Recommended for Testing)
+- [ ] Start mock server: `node project/mock-whisper-server.js`
+- [ ] Configure Vox to use: `http://127.0.0.1:8081`
+- [ ] No installation required - works immediately!
+
+### Option 2: Real whisper.cpp (For Production)
 - [ ] Install whisper.cpp: `git clone https://github.com/ggerganov/whisper.cpp.git`
 - [ ] Build server: `cd whisper.cpp && make server`
 - [ ] Download model: `./models/download-ggml-model.sh base.en`
@@ -254,15 +259,24 @@ The method body stays the same - it already handles object-format segments!
 
 ## Curl Test Commands
 
-### Test whisper.cpp Server
+### Test Mock Server or whisper.cpp Server
 ```bash
-# Basic test
+# Basic test (works with both mock and real server)
 curl -X POST http://127.0.0.1:8081/inference \
   -H "Content-Type: multipart/form-data" \
   -F file="@test.mp3" \
   -F temperature="0.0" \
   -F temperature_inc="0.2" \
   -F response_format="json"
+```
+
+### Start Mock Server for Testing
+```bash
+# Quick and easy - no whisper.cpp installation needed!
+node project/mock-whisper-server.js
+
+# Or with custom port
+node project/mock-whisper-server.js 8082
 ```
 
 ### Expected Response

@@ -9,27 +9,33 @@ This directory contains comprehensive planning and documentation for integrating
 **Contents**: Project goals, benefits, risks, timeline, and recommendations  
 **Audience**: Project managers, product owners, stakeholders
 
-### 2. ANALYSIS.md
+### 2. MOCK_SERVER.md ⭐ NEW
+**Purpose**: Documentation for the mock whisper.cpp server for testing  
+**Contents**: Quick start guide, usage instructions, benefits vs real server  
+**Audience**: Developers, testers  
+**Quick Start**: `node project/mock-whisper-server.js`
+
+### 3. ANALYSIS.md
 **Purpose**: Detailed technical analysis of current vs. new implementation  
 **Contents**: Current architecture, API differences, compatibility assessment  
 **Audience**: Developers, architects
 
-### 3. TECHNICAL_SPEC.md
+### 4. TECHNICAL_SPEC.md
 **Purpose**: Complete technical specification for the implementation  
 **Contents**: API specification, data types, architecture diagrams, testing requirements  
 **Audience**: Developers, QA engineers
 
-### 4. IMPLEMENTATION_PLAN.md
+### 5. IMPLEMENTATION_PLAN.md
 **Purpose**: Step-by-step implementation guide  
 **Contents**: Phased approach, code changes, checklist of tasks  
 **Audience**: Developers implementing the changes
 
-### 5. QUICK_REFERENCE.md
+### 6. QUICK_REFERENCE.md
 **Purpose**: Quick lookup guide for common tasks and code snippets  
 **Contents**: Code changes, testing commands, troubleshooting  
 **Audience**: Developers during implementation
 
-### 6. MIGRATION_GUIDE.md
+### 7. MIGRATION_GUIDE.md
 **Purpose**: Guide for users and developers migrating to new backend  
 **Contents**: Setup instructions, API changes, troubleshooting  
 **Audience**: End users, plugin administrators
@@ -104,7 +110,23 @@ NEW: { text, language, segments: [{object format}], task, duration, detected_lan
 
 ## Testing
 
-### Local Setup
+### Option 1: Mock Server (Quick & Easy)
+```bash
+# Start the mock server - no installation needed!
+node project/mock-whisper-server.js
+
+# Then configure Obsidian Vox to use: http://127.0.0.1:8081
+```
+
+**Benefits:**
+- ✅ No whisper.cpp installation required
+- ✅ Instant setup and testing
+- ✅ Returns realistic mock data
+- ✅ Perfect for development
+
+See `project/MOCK_SERVER.md` for full documentation.
+
+### Option 2: Real whisper.cpp Server
 ```bash
 # Clone and build whisper.cpp
 git clone https://github.com/ggerganov/whisper.cpp.git
@@ -118,6 +140,7 @@ make server
 
 ### Test with Curl
 ```bash
+# Works with both mock and real server
 curl http://127.0.0.1:8081/inference \
   -H "Content-Type: multipart/form-data" \
   -F file="@test.mp3" \
