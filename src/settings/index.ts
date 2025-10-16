@@ -36,6 +36,10 @@ export interface Settings {
   tags: Array<string>;
   tagLimit: number;
   // tagSource: TagMatchSource;
+
+  // Whisper.cpp specific settings
+  temperature: string;
+  temperatureInc: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -66,6 +70,10 @@ export const DEFAULT_SETTINGS: Settings = {
     DR: "Dream",
     RM: "Ramble",
   },
+
+  // Whisper.cpp defaults
+  temperature: "0.0",
+  temperatureInc: "0.2",
 };
 
 export class VoxSettingTab extends PluginSettingTab {
@@ -92,6 +100,9 @@ export class VoxSettingTab extends PluginSettingTab {
 
     this.addTags();
     this.addCategorisation();
+
+    this.addCategoryHeading("Whisper Settings");
+    this.addWhisperSettings();
 
     this.addSelfHostToggle();
   }
@@ -134,7 +145,7 @@ export class VoxSettingTab extends PluginSettingTab {
     new Setting(this.containerEl)
       .setName("Watch Location")
       .setDesc(
-        "The plugin will watch this location for voice-memos to process and automatically trascribe any new audio files."
+        "The plugin will watch this location for voice-memos to process and automatically trascribe any new audio files.",
       )
       .addSearch((cb) => {
         new FolderSuggest(cb.inputEl);
@@ -183,7 +194,7 @@ export class VoxSettingTab extends PluginSettingTab {
     description.append(
       "When enabled, remove the original file from the watch directory.",
       description.createEl("br"),
-      "Note - the audio file will always be copied into the processed directory and linked to your markdown automatically."
+      "Note - the audio file will always be copied into the processed directory and linked to your markdown automatically.",
     );
 
     new Setting(this.containerEl)
@@ -223,7 +234,7 @@ export class VoxSettingTab extends PluginSettingTab {
         });
       });
 
-    this.addTagLimit(), this.addTagsList();
+    (this.addTagLimit(), this.addTagsList());
     this.toggleSettingsVisibility(TAG_SETTINGS_CLASS, this.plugin.settings.shouldExtractTags);
   }
 
@@ -273,7 +284,7 @@ export class VoxSettingTab extends PluginSettingTab {
       .setName("Custom Tags")
       .setClass(TAG_SETTINGS_CLASS)
       .setDesc(
-        "Transcripts which include references to these tags will inclue them in the generated markdown file. Separate tags with commas."
+        "Transcripts which include references to these tags will inclue them in the generated markdown file. Separate tags with commas.",
       )
       .addTextArea((cb) => {
         cb.inputEl.style.minWidth = "4rem";
@@ -306,7 +317,7 @@ export class VoxSettingTab extends PluginSettingTab {
     new Setting(this.containerEl)
       .setName("Enable Filename Categorisation")
       .setDesc(
-        "Categorise your transcriptions depending on the audio's filename prefix. Please see the plugin homepage for more information."
+        "Categorise your transcriptions depending on the audio's filename prefix. Please see the plugin homepage for more information.",
       )
       .addToggle((cb) => {
         cb.setValue(this.plugin.settings.shouldUseCategoryMaps);
@@ -532,6 +543,44 @@ export class VoxSettingTab extends PluginSettingTab {
     this.toggleSettingsVisibility(SELF_HOSTING_CLASS, this.plugin.settings.isSelfHosted);
   }
 
+  addWhisperSettings(): void {
+    new Setting(this.containerEl)
+      .setName("Temperature")
+      .setDesc("Controls randomness in transcription. 0.0 is deterministic, higher values increase randomness.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "0.0",
+          max: "1.0",
+          step: "0.1",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(this.plugin.settings.temperature);
+        cb.onChange((value) => {
+          this.plugin.settings.temperature = value;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Temperature Increment")
+      .setDesc("Temperature increment for fallback when transcription fails. Used to retry with higher randomness.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "0.0",
+          max: "1.0",
+          step: "0.1",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(this.plugin.settings.temperatureInc);
+        cb.onChange((value) => {
+          this.plugin.settings.temperatureInc = value;
+          this.plugin.saveSettings();
+        });
+      });
+  }
+
   addSelfHostLocation(): void {
     const description = document.createDocumentFragment();
     description.append(
@@ -543,7 +592,7 @@ export class VoxSettingTab extends PluginSettingTab {
       description.createEl("code", { text: "https://", cls: "st-inline-code" }),
       " and port; ",
       description.createEl("code", { text: "1337", cls: "st-inline-code" }),
-      "."
+      ".",
     );
 
     const containerEl = this.containerEl.createEl("div", {

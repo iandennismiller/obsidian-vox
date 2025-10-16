@@ -17,6 +17,7 @@ main.test.js
 # test
 test/
 tests_jest/
+coverage/
 
 # Obsidian
 data.json
