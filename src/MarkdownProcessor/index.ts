@@ -27,7 +27,7 @@ export class MarkdownProcessor {
     private readonly vault: Vault,
     private settings: Settings,
     private readonly logger: Logger,
-    private readonly plugin: VoxPlugin
+    private readonly plugin: VoxPlugin,
   ) {}
 
   /**
@@ -37,7 +37,7 @@ export class MarkdownProcessor {
     originalFile: FileDetail,
     processedAudio: FileDetail,
     originalAudioFileHash: string,
-    transcription: TranscriptionResponse
+    transcription: TranscriptionResponse,
   ): Promise<MarkdownOutput> {
     this.logger.log(`Generating markdown content: ${originalFile.filename}`);
 
@@ -119,23 +119,25 @@ export class MarkdownProcessor {
     return title;
   }
 
-  private objectifySegment(segment: RawTranscriptionSegment): TranscriptionSegment {
+  private objectifySegment(segment: RawTranscriptionSegment | TranscriptionSegment): TranscriptionSegment {
     // Small snippets can be returned as TranscriptionSegment from the API.
     if (segment.hasOwnProperty("text")) {
-      return segment as never as TranscriptionSegment;
+      return segment as TranscriptionSegment;
     }
 
+    // Handle legacy array format
+    const rawSegment = segment as RawTranscriptionSegment;
     return {
-      id: segment[0],
-      seek: segment[1],
-      start: segment[2],
-      end: segment[3],
-      text: segment[4],
-      tokens: segment[5],
-      temperature: segment[6],
-      avg_logprob: segment[7],
-      compression_ratio: segment[8],
-      no_speech_prob: segment[9],
+      id: rawSegment[0],
+      seek: rawSegment[1],
+      start: rawSegment[2],
+      end: rawSegment[3],
+      text: rawSegment[4],
+      tokens: rawSegment[5],
+      temperature: rawSegment[6],
+      avg_logprob: rawSegment[7],
+      compression_ratio: rawSegment[8],
+      no_speech_prob: rawSegment[9],
     };
   }
 }

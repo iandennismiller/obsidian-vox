@@ -79,26 +79,50 @@ export type RawTranscriptionSegment = [
   number, // temperature
   number, // avg_logprob
   number, // compression_ratio
-  number // no_speech_prob
+  number, // no_speech_prob
 ];
+
+/**
+ * Word-level timestamp information from whisper.cpp
+ */
+export type TranscriptionWord = {
+  word: string;
+  start: number;
+  end: number;
+  t_dtw: number;
+  probability: number;
+};
 
 export type TranscriptionSegment = {
   id: number;
-  seek: number;
   start: number;
   end: number;
   text: string;
   tokens: number[];
   temperature: number;
   avg_logprob: number;
-  compression_ratio: number;
   no_speech_prob: number;
+
+  // Optional fields for backward compatibility
+  seek?: number;
+  compression_ratio?: number;
+
+  // New optional field from whisper.cpp
+  words?: TranscriptionWord[];
 };
 
 export type TranscriptionResponse = {
+  // Core fields (required)
   text: string;
   language: string;
-  segments: RawTranscriptionSegment[];
+  segments: TranscriptionSegment[];
+
+  // New optional fields from whisper.cpp
+  task?: string;
+  duration?: number;
+  detected_language?: string;
+  detected_language_probability?: number;
+  language_probabilities?: Record<string, number>;
 };
 
 export type FileDetail = {

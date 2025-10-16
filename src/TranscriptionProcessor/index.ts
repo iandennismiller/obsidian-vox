@@ -63,7 +63,7 @@ export class TranscriptionProcessor {
     private readonly app: App,
     private settings: Settings,
     private readonly logger: Logger,
-    private readonly plugin: VoxPlugin
+    private readonly plugin: VoxPlugin,
   ) {
     this.markdownProcessor = new MarkdownProcessor(app.vault, settings, logger, this.plugin);
     this.audioProcessor = new AudioProcessor(app.appId, app.vault, settings, logger);
@@ -186,7 +186,7 @@ export class TranscriptionProcessor {
   private async transcribe(audioFile: FileDetail): Promise<TranscriptionResponse | null> {
     const host = this.settings.isSelfHosted ? this.settings.selfHostedEndpoint : PUBLIC_API_ENDPOINT;
 
-    const url = `${host}/transcribe`;
+    const url = `${host}/inference`;
 
     const mimetype = `audio/${audioFile.extension.replace(".", "")}`;
 
@@ -197,21 +197,28 @@ export class TranscriptionProcessor {
     });
 
     try {
-      const response = await axios.postForm<TranscriptionResponse>(
-        url,
-        {
-          audio_file: audioBlobFile,
-        },
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            [OBSIDIAN_VAULT_ID_HEADER_KEY]: this.app.appId,
-            [OBSIDIAN_API_KEY_HEADER_KEY]: this.settings.apiKey,
-          },
-          timeout: 20 * ONE_MINUTE_IN_MS,
-          responseType: "json",
-        }
-      );
+      const formData = {
+        file: audioBlobFile,
+        temperature: this.settings.temperature ?? "0.0",
+        temperature_inc: this.settings.temperatureInc ?? "0.2",
+        response_format: "json",
+      };
+
+      const headers: Record<string, string> = {
+        "Content-Type": "multipart/form-data",
+      };
+
+      // Only add API keys if using the public endpoint
+      if (!this.settings.isSelfHosted) {
+        headers[OBSIDIAN_VAULT_ID_HEADER_KEY] = this.app.appId;
+        headers[OBSIDIAN_API_KEY_HEADER_KEY] = this.settings.apiKey;
+      }
+
+      const response = await axios.postForm<TranscriptionResponse>(url, formData, {
+        headers,
+        timeout: 20 * ONE_MINUTE_IN_MS,
+        responseType: "json",
+      });
 
       if (!response.data || response.status !== 200) {
         console.warn("Could not transcribe audio:", response);
@@ -336,7 +343,7 @@ export class TranscriptionProcessor {
           originalAudioFileName: (filename as string) ?? "",
           originalAudioFileHash: (hash as string) ?? "",
         };
-      })
+      }),
     );
 
     return transcribedFilesInfo;
@@ -344,7 +351,7 @@ export class TranscriptionProcessor {
 
   public async getTranscribedStatus(
     filepath: string,
-    transcribedItems: TranscribedItem[]
+    transcribedItems: TranscribedItem[],
   ): Promise<TranscriptionCandidate> {
     const detail = extractFileDetail(filepath);
 
