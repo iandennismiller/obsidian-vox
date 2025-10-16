@@ -1,14 +1,16 @@
 # Obsidian Vox - Smart Voice Transcription
 
-VOX automatically transcribes the audio notes in your Obsidian vault - extracting metadata, categories and tag information. The transcribed text is then placed into its final direcory with its accompanying metadata (frontmatter) and tags.
+VOX automatically transcribes the audio notes in your Obsidian vault - extracting metadata, categories and tag information. The transcribed text is then placed into its final directory with its accompanying metadata (frontmatter) and tags.
 
 ![readme_visual_1800](https://github.com/vincentbavitz/obsidian-vox/assets/58160433/10528b09-ab04-49e3-8b24-06457d7abb57)
 
 The *unprocessed* directory is watched for new files; upon discovering a new file it will trigger the transcription and save the file to your vault.
 
-Currently your transcriptions are processed on a remote server I set up specifically for Vox at no expense to the users of the plugin. You are limited to 100 transcriptions per day, and I will increase this limit to 1000 per day per Vault if there is capacity. Files are only held in memory as buffers and are not saved to disk on the server. No personal information is collected or processed.
+## Transcription Options
 
-My intention is for Vox to be as easy to use as possible - however if you feel more secure running your own backend, this will be possible following versions.
+**Self-Hosted (Recommended)**: Use [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for completely private, unlimited, and free transcription on your own machine. See [Self-Hosting with Whisper.cpp](#self-hosting-with-whisper.cpp) for setup instructions.
+
+**Public API**: For quick setup, use the public transcription service (limited to 100 transcriptions per day). Files are only held in memory as buffers and are not saved to disk on the server. No personal information is collected or processed.
 
 ***Please note** that at this moment, the transcription model is fine-tuned for English and may struggle with other languages.*
 
@@ -110,7 +112,113 @@ In the near-future, VOX will add the open-source Llama model to its backend to f
 
 A built in audio recorder would prompt users for the voice note category and importance rating after a voice note is made, then automatically transcribe it and place it in the right place in their Vault.
 
-## Self Hosting
+## Self-Hosting with Whisper.cpp
 
-Self Hosting will be available in future versions - I am working out some technical details on the back-end to make self-hosting simple and easy.
-<!-- See my repository [obsidian-vox-backend](https://github.com/vincentbavitz/obsidian-vox-backend) for instructions on self-hosting. -->
+VOX now supports self-hosted transcription using [whisper.cpp](https://github.com/ggerganov/whisper.cpp), giving you complete privacy and control over your voice transcriptions. With self-hosting, your audio files never leave your computer, and you have unlimited transcriptions at no cost.
+
+### Benefits of Self-Hosting
+
+- 🔒 **Privacy**: Audio stays on your machine
+- 💰 **No Cost**: No subscription or API fees
+- 🚀 **Unlimited**: No daily transcription limits
+- 🎛️ **Control**: Choose your model and parameters
+- ⭐ **Features**: Word-level timestamps and language detection
+
+### Quick Start with Whisper.cpp
+
+#### 1. Install Whisper.cpp Server
+
+```bash
+# Clone whisper.cpp
+git clone https://github.com/ggerganov/whisper.cpp.git
+cd whisper.cpp
+
+# Build the server
+make server
+
+# Download a model (base.en recommended for English)
+./models/download-ggml-model.sh base.en
+```
+
+#### 2. Start the Server
+
+```bash
+# Start on default port 8080
+./server -m models/ggml-base.en.bin
+
+# Or specify a custom port
+./server -m models/ggml-base.en.bin --port 8081
+```
+
+#### 3. Configure VOX
+
+1. Open Obsidian Settings → VOX
+2. Enable **"Use Self-Hosted Backend"**
+3. Set **"Self Hosted Backend Location"** to: `http://127.0.0.1:8080`
+4. Adjust **Whisper Settings** (optional):
+   - **Temperature**: Controls randomness (0.0 = deterministic)
+   - **Temperature Increment**: Fallback increment for retries
+
+#### 4. Start Transcribing
+
+Place audio files in your watch directory, and VOX will automatically transcribe them using your local whisper.cpp server!
+
+### Model Selection
+
+Choose a model based on your needs:
+
+| Model | Speed | Quality | RAM Required | Best For |
+|-------|-------|---------|--------------|----------|
+| tiny  | Fastest | Basic | ~390 MB | Quick notes |
+| base  | Fast | Good | ~440 MB | General use ⭐ |
+| small | Medium | Better | ~860 MB | Higher quality |
+| medium | Slow | Great | ~2.9 GB | Professional |
+| large | Slowest | Best | ~6.9 GB | Maximum quality |
+
+### Testing with Mock Server
+
+For development and testing without installing whisper.cpp:
+
+```bash
+# Start the mock server
+node project/mock-whisper-server.js
+
+# Configure VOX to use: http://127.0.0.1:8081
+```
+
+The mock server returns realistic test data instantly, perfect for plugin development.
+
+### Troubleshooting
+
+**Connection Issues**
+- Ensure whisper.cpp server is running
+- Verify the URL and port in VOX settings
+- Check firewall settings for localhost connections
+
+**Slow Transcription**
+- Try a smaller model (base or tiny)
+- Ensure sufficient RAM is available
+- Close other memory-intensive applications
+
+**Quality Issues**
+- Use a larger model (small, medium, or large)
+- Ensure audio files are clear and well-recorded
+- Try adjusting the temperature setting
+
+### Advanced Configuration
+
+**Custom Models**: Point to any GGML model file with the `-m` flag
+
+**Language Support**: Use multilingual models for non-English transcription
+
+**Performance Tuning**: Adjust `--threads` parameter based on your CPU
+
+For more details, see the [whisper.cpp documentation](https://github.com/ggerganov/whisper.cpp).
+
+---
+
+### Legacy Public API
+
+The original cloud transcription service is still available with a limit of 100 transcriptions per day. Simply leave "Use Self-Hosted Backend" disabled to use the public API.
+
+*Note: The transcription model is fine-tuned for English and may struggle with other languages.*
