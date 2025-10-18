@@ -45,6 +45,10 @@ export interface Settings {
   maxRetries: number;
   retryBaseDelayMs: number;
   retryMaxDelayMs: number;
+
+  // File watching debounce settings
+  fileStabilityDelayMs: number;
+  fileStabilityCheckIntervalMs: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -84,6 +88,10 @@ export const DEFAULT_SETTINGS: Settings = {
   maxRetries: 3,
   retryBaseDelayMs: 5000, // 5 seconds
   retryMaxDelayMs: 300000, // 5 minutes
+
+  // File watching debounce defaults
+  fileStabilityDelayMs: 3000, // 3 seconds - wait time after last file size change
+  fileStabilityCheckIntervalMs: 1000, // 1 second - how often to check file size
 };
 
 export class VoxSettingTab extends PluginSettingTab {
@@ -113,6 +121,9 @@ export class VoxSettingTab extends PluginSettingTab {
 
     this.addCategoryHeading("Whisper Settings");
     this.addWhisperSettings();
+
+    this.addCategoryHeading("File Watching Settings");
+    this.addFileWatchingSettings();
 
     this.addSelfHostToggle();
   }
@@ -640,6 +651,44 @@ export class VoxSettingTab extends PluginSettingTab {
         cb.setValue(String(this.plugin.settings.retryMaxDelayMs));
         cb.onChange((value) => {
           this.plugin.settings.retryMaxDelayMs = parseInt(value) || 300000;
+          this.plugin.saveSettings();
+        });
+      });
+  }
+
+  addFileWatchingSettings(): void {
+    new Setting(this.containerEl)
+      .setName("File Stability Delay (ms)")
+      .setDesc("Wait this long after file size stops changing before processing. Ensures file is fully written.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "1000",
+          max: "30000",
+          step: "1000",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.fileStabilityDelayMs));
+        cb.onChange((value) => {
+          this.plugin.settings.fileStabilityDelayMs = parseInt(value) || 3000;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("File Stability Check Interval (ms)")
+      .setDesc("How often to check if file size has changed. Lower values detect changes faster but use more resources.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "500",
+          max: "5000",
+          step: "500",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.fileStabilityCheckIntervalMs));
+        cb.onChange((value) => {
+          this.plugin.settings.fileStabilityCheckIntervalMs = parseInt(value) || 1000;
           this.plugin.saveSettings();
         });
       });
