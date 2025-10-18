@@ -44,7 +44,7 @@ See [obsidian-vox-backend](https://github.com/vincentbavitz/obsidian-vox-backend
 2. Update the plugin settings to suit your input/output folders for your voice notes.
 3. Move a voice note over to your watch directory (eg `<Vault>/Voice/unprocessed`) as a test file
 
-**Supported Audio Formats**: VOX supports WAV, MP3, M4A, AAC, and OGG formats. M4A files are automatically converted to MP3 before transcription to ensure compatibility with whisper.cpp.
+**Supported Audio Formats**: VOX supports WAV, MP3, M4A, AAC, and OGG formats. All non-WAV files are automatically converted to WAV before transcription to ensure compatibility with whisper.cpp.
 
 #### Example Setup - Mobile Only
 

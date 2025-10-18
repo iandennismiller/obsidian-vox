@@ -24,7 +24,7 @@ export class AudioProcessor {
   ) {}
 
   /**
-   * Converts a voice note to the desired extension, and generates a filesystem
+   * Converts a voice note to WAV format for whisper.cpp transcription, and generates a filesystem
    * friendly filename, prefixed with the recorded date and time.
    *
    * @note
@@ -32,8 +32,8 @@ export class AudioProcessor {
    * ensuring that with filename changes, we can still determine its status.
    * 
    * @note
-   * M4A files are always converted to MP3 first to ensure compatibility with whisper.cpp,
-   * then converted to the final output format if different from MP3.
+   * Whisper.cpp requires WAV format. All audio files are converted to WAV for transcription,
+   * then converted to the final output format based on user settings.
    */
   public async transformAudio(audioFile: FileDetail): Promise<FileDetail> {
     // Is this actually an audio file?
@@ -52,22 +52,22 @@ export class AudioProcessor {
     let audioBinary = await this.vault.adapter.readBinary(audioFile.filepath);
     let currentExtension = audioFile.extension;
 
-    // M4A files must be converted to MP3 first for whisper.cpp compatibility
-    if (audioFile.extension === ".m4a") {
-      this.logger.log(`Converting M4A file to MP3: "${audioFile.filename}"`);
+    // All non-WAV files must be converted to WAV for whisper.cpp compatibility
+    if (audioFile.extension !== ".wav") {
+      this.logger.log(`Converting ${audioFile.extension} file to WAV for transcription: "${audioFile.filename}"`);
       
       const host = this.settings.isSelfHosted ? this.settings.selfHostedEndpoint : PUBLIC_API_ENDPOINT;
       const url = `${host}/convert/audio`;
 
-      const audioBlob = new Blob([audioBinary], { type: "audio/m4a" });
+      const audioBlob = new Blob([audioBinary], { type: `audio/${audioFile.extension.replace(".", "")}` });
       const audioBlobFile = new File([audioBlob], audioFile.filename, {
-        type: "audio/m4a",
+        type: `audio/${audioFile.extension.replace(".", "")}`,
       });
 
       const response = await axios.postForm<Buffer>(
         url,
         {
-          format: "mp3",
+          format: "wav",
           audio_file: audioBlobFile,
         },
         {
@@ -81,13 +81,13 @@ export class AudioProcessor {
       );
 
       if (!response.data || response.status !== 200) {
-        const error = "There was an error converting M4A to MP3. Please ensure your transcription service supports audio conversion.";
+        const error = `There was an error converting ${audioFile.extension} to WAV. Please ensure your transcription service supports audio conversion.`;
         new Notice(error);
         throw new Error(error);
       }
 
       audioBinary = response.data;
-      currentExtension = ".mp3";
+      currentExtension = ".wav";
     }
 
     // Convert the file to the final output extension if needed
