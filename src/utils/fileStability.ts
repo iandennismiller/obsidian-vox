@@ -18,7 +18,7 @@ export async function waitForFileStability(
 ): Promise<void> {
   return new Promise<void>(async (resolve, reject) => {
     let lastSize: number | null = null;
-    let lastChangeTime: number = Date.now();
+    let stableStartTime: number | null = null;
     let checkCount = 0;
     const maxChecks = Math.ceil((stabilityDelayMs * 10) / checkIntervalMs); // Allow up to 10x stability delay worth of checks
 
@@ -44,24 +44,32 @@ export async function waitForFileStability(
 
         // Check if file has non-zero size
         if (currentSize === 0) {
-          // File is empty, keep checking
-          lastChangeTime = Date.now();
+          // File is empty, reset stability tracking and keep checking
+          lastSize = null;
+          stableStartTime = null;
           setTimeout(checkFile, checkIntervalMs);
           return;
         }
 
         // Check if size has changed
         if (lastSize === null || currentSize !== lastSize) {
-          // Size has changed, reset the timer
+          // Size has changed or this is first time seeing non-zero size
+          // Reset the stability timer
           lastSize = currentSize;
-          lastChangeTime = Date.now();
+          stableStartTime = null;
           setTimeout(checkFile, checkIntervalMs);
           return;
         }
 
-        // Size hasn't changed, check if enough time has passed
-        const timeSinceLastChange = Date.now() - lastChangeTime;
-        if (timeSinceLastChange >= stabilityDelayMs) {
+        // Size hasn't changed since last check
+        // Start tracking stability time if not already started
+        if (stableStartTime === null) {
+          stableStartTime = Date.now();
+        }
+
+        // Check if enough time has passed since size became stable
+        const timeSinceStable = Date.now() - stableStartTime;
+        if (timeSinceStable >= stabilityDelayMs) {
           // File is stable!
           resolve();
           return;
