@@ -1,7 +1,7 @@
 import createModule from "@transcribe/shout";
 import { FileTranscriber } from "@transcribe/transcriber";
 import { readFile } from "fs/promises";
-import { Notice } from "obsidian";
+import { App, Notice } from "obsidian";
 import { FileDetail, TranscriptionResponse } from "types";
 import { Logger } from "utils/log";
 
@@ -16,6 +16,8 @@ export class LocalWhisperTranscriber {
   constructor(
     private modelPath: string,
     private logger: Logger,
+    private app: App,
+    private pluginId: string,
   ) {}
 
   /**
@@ -68,15 +70,31 @@ export class LocalWhisperTranscriber {
       const customCreateModule = async (moduleArg: any = {}) => {
         console.log("[LocalWhisperTranscriber] ===== Creating WASM module with custom config =====");
         
-        // In Obsidian, use app://obsidian.md as the base URL
-        // This is an alias that points to the current vault
+        // Use Obsidian's vault adapter to get the base path
+        // The vault adapter's basePath gives us the filesystem path to the vault
+        const adapter = this.app.vault.adapter;
+        let workerUrl: string;
         
-        const pluginBaseUrl = `app://obsidian.md/.obsidian/plugins/vox/`;
-        console.log(`[LocalWhisperTranscriber] Constructed plugin base URL: ${pluginBaseUrl}`);
+        // @ts-ignore - accessing basePath which exists but isn't in public types
+        if (adapter.basePath) {
+          // @ts-ignore
+          const basePath = adapter.basePath;
+          console.log(`[LocalWhisperTranscriber] Vault base path: ${basePath}`);
+          
+          // Construct the file:// URL to the worker file in the plugin directory
+          // The worker file is at: <vault>/.obsidian/plugins/vox/shout.wasm.worker.mjs
+          const workerFilePath = `${basePath}/.obsidian/plugins/${this.pluginId}/shout.wasm.worker.mjs`;
+          workerUrl = `file://${workerFilePath}`;
+          
+          console.log(`[LocalWhisperTranscriber] Constructed worker file path: ${workerFilePath}`);
+          console.log(`[LocalWhisperTranscriber] Constructed worker URL: ${workerUrl}`);
+        } else {
+          // Fallback to app://obsidian.md if basePath is not available
+          workerUrl = `app://obsidian.md/.obsidian/plugins/${this.pluginId}/shout.wasm.worker.mjs`;
+          console.warn(`[LocalWhisperTranscriber] Could not access vault basePath, using fallback URL: ${workerUrl}`);
+        }
         
         try {
-          // The worker file is in the same directory as main.js
-          const workerUrl = `${pluginBaseUrl}shout.wasm.worker.mjs`;
           
           console.log(`[LocalWhisperTranscriber] *** SETTING pthreadMainJs to: ${workerUrl} ***`);
           moduleArg.pthreadMainJs = workerUrl;
