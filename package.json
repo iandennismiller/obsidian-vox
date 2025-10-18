@@ -25,6 +25,8 @@
   ],
   "dependencies": {
     "@popperjs/core": "^2.11.8",
+    "@transcribe/shout": "^1.0.6",
+    "@transcribe/transcriber": "^3.0.0",
     "@wasm-audio-decoders/flac": "^0.2.8",
     "@wasm-audio-decoders/ogg-vorbis": "^0.1.18",
     "axios": "^1.4.0",

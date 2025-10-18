@@ -1,4 +1,5 @@
 import { AudioProcessor } from "AudioProcessor";
+import { LocalWhisperTranscriber } from "LocalWhisperTranscriber";
 import { MarkdownProcessor } from "MarkdownProcessor";
 import axios, { HttpStatusCode, isAxiosError } from "axios";
 import { randomUUID } from "crypto";
@@ -54,6 +55,7 @@ type StateSubscriberMap = Record<string, (state: TranscriptionProcessorState) =>
 export class TranscriptionProcessor {
   private markdownProcessor: MarkdownProcessor;
   private audioProcessor: AudioProcessor;
+  private localTranscriber: LocalWhisperTranscriber | null = null;
   private queue: PQueue;
 
   public state: TranscriptionProcessorState;
@@ -122,7 +124,33 @@ export class TranscriptionProcessor {
     this.settings = settings;
     this.queue.clear();
 
+    // Reset local transcriber if settings changed
+    if (this.localTranscriber) {
+      this.localTranscriber.cleanup();
+      this.localTranscriber = null;
+    }
+
     this.notifySubscribers();
+  }
+
+  /**
+   * Initialize the local transcriber if in local mode.
+   */
+  private async ensureLocalTranscriberInitialized(): Promise<void> {
+    if (this.settings.transcriptionMode !== "local") {
+      return;
+    }
+
+    if (this.localTranscriber) {
+      return; // Already initialized
+    }
+
+    if (!this.settings.localModelPath) {
+      throw new Error("Local model path is not configured. Please set it in settings.");
+    }
+
+    this.localTranscriber = new LocalWhisperTranscriber(this.settings.localModelPath, this.logger);
+    await this.localTranscriber.init();
   }
 
   /**
@@ -151,6 +179,11 @@ export class TranscriptionProcessor {
     console.debug(`[Transcription] Processing file: ${audioFile.filename}`);
     
     try {
+      // Initialize local transcriber if in local mode
+      if (this.settings.transcriptionMode === "local") {
+        await this.ensureLocalTranscriberInitialized();
+      }
+
       this.setCanditateStatus(audioFile, VoxStatusItemStatus.PROCESSING_AUDIO);
       console.debug(`[Transcription] Status: PROCESSING_AUDIO`);
       const processedAudio = await this.audioProcessor.transformAudio(audioFile);
@@ -184,6 +217,18 @@ export class TranscriptionProcessor {
   }
 
   private async transcribe(audioFile: FileDetail): Promise<TranscriptionResponse | null> {
+    // Use local WASM transcription if in local mode
+    if (this.settings.transcriptionMode === "local") {
+      if (!this.localTranscriber) {
+        throw new Error("Local transcriber not initialized");
+      }
+
+      console.debug(`[Transcription] Using local WASM transcription for: ${audioFile.filename}`);
+      const audioBinary = await this.app.vault.adapter.readBinary(audioFile.filepath);
+      return await this.localTranscriber.transcribe(audioFile, audioBinary);
+    }
+
+    // Remote transcription (existing code)
     const host = this.settings.isSelfHosted ? this.settings.selfHostedEndpoint : PUBLIC_API_ENDPOINT;
 
     const url = `${host}/inference`;
