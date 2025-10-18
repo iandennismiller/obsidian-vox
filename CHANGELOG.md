@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [Unreleased]
+
+### Added
+- **Local Audio Conversion**: Audio format conversion now happens entirely locally using WebAssembly decoders
+  - Added support for MP3/MP2/MP1 decoding via `mpg123-decoder`
+  - Added support for OGG Vorbis decoding via `@wasm-audio-decoders/ogg-vorbis`
+  - Added support for FLAC decoding via `@wasm-audio-decoders/flac`
+  - Audio files are automatically converted to WAV format for whisper.cpp transcription
+  - No server-side conversion needed - all processing happens on your device
+  - Improved privacy: audio files never leave your device during conversion
+
+### Changed
+- Audio output format is now fixed to WAV (required by whisper.cpp)
+- Audio Output Extension setting is now informational only (WAV is required)
+- Removed dependency on server-side `/convert/audio` API endpoint
+
+### Technical Details
+- New `LocalAudioConverter` class handles all audio format conversion
+- Proper memory management with `decoder.free()` after each conversion
+- Enhanced logging with file size information and conversion details
+- Comprehensive unit tests for audio conversion logic
+- CodeQL security analysis passed with no vulnerabilities
+
 ### [1.1.1](https://github.com/vincentbavitz/obsidian-vox/compare/1.1.0...1.1.1) (2024-09-18)
 
 ## [1.1.0](https://github.com/vincentbavitz/obsidian-vox/compare/1.0.19...1.1.0) (2024-09-18)

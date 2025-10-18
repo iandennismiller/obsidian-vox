@@ -14,6 +14,27 @@ The *unprocessed* directory is watched for new files; upon discovering a new fil
 
 ***Please note** that at this moment, the transcription model is fine-tuned for English and may struggle with other languages.*
 
+## Audio Format Conversion
+
+VOX now handles **all audio conversion locally** using WebAssembly decoders, ensuring your audio files never leave your machine during format conversion. Audio files are automatically converted to WAV format (required by whisper.cpp) before transcription.
+
+### Supported Audio Formats
+
+- ✅ **MP3** - Full support (MP1, MP2, MP3)
+- ✅ **OGG** - Ogg Vorbis format
+- ✅ **FLAC** - Free Lossless Audio Codec
+- ✅ **WAV** - Pass-through (no conversion needed)
+- ⚠️ **M4A/AAC** - Not yet supported (coming soon)
+
+### Benefits of Local Conversion
+
+- 🔒 **Privacy**: Audio files never leave your device during conversion
+- ⚡ **Speed**: Fast in-browser conversion using WebAssembly
+- 💾 **Offline**: No internet required for audio format conversion
+- 🎯 **Automatic**: Seamless conversion to whisper.cpp's required WAV format
+
+If you have M4A or AAC files, please convert them to MP3, OGG, or FLAC format first using your preferred audio converter.
+
 #### Status View
 
 Open the status panel to see the current status of your transcription queue.
