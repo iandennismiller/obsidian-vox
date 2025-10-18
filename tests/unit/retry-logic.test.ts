@@ -154,6 +154,32 @@ describe("Retry Logic", () => {
       retryCount = 4;
       expect(retryCount >= maxRetries).toBe(true);
     });
+
+    it("should stop at exactly maxRetries attempts (not more)", () => {
+      const maxRetries = 3;
+      let currentRetryCount = 0;
+      let attemptCount = 0;
+
+      // Simulate the actual retry logic
+      for (let i = 0; i < 10; i++) {
+        attemptCount++;
+        
+        // Increment retry count (this happens BEFORE check in our code)
+        currentRetryCount++;
+        
+        // Check if we've exceeded max retries (using NEW count after incrementing)
+        if (currentRetryCount >= maxRetries) {
+          // Stop retrying
+          break;
+        }
+        
+        // If we haven't exceeded, we would schedule another retry
+      }
+
+      // Should have exactly maxRetries attempts
+      expect(attemptCount).toBe(maxRetries);
+      expect(currentRetryCount).toBe(maxRetries);
+    });
   });
 
   describe("Retry Delay Examples", () => {

@@ -235,11 +235,15 @@ export class TranscriptionProcessor {
    */
   private handleTranscriptionError(audioFile: TranscriptionCandidate, error: unknown) {
     const statusItem = this.state.items[audioFile.hash];
-    const retryCount = statusItem?.retryCount ?? 0;
+    const currentRetryCount = statusItem?.retryCount ?? 0;
 
+    // Increment retry count first
     this.incrementRetryCount(audioFile);
+    
+    // Get the new retry count after incrementing
+    const newRetryCount = currentRetryCount + 1;
 
-    console.warn(`Transcription error (attempt ${retryCount + 1}/${this.settings.maxRetries}):`, error);
+    console.warn(`Transcription error (attempt ${newRetryCount}/${this.settings.maxRetries}):`, error);
 
     if (isAxiosError(error)) {
       if (error.response?.status === HttpStatusCode.TooManyRequests) {
@@ -252,8 +256,8 @@ export class TranscriptionProcessor {
       }
     }
 
-    // Check if we've exceeded max retries
-    if (retryCount >= this.settings.maxRetries) {
+    // Check if we've exceeded max retries (using the NEW count after incrementing)
+    if (newRetryCount >= this.settings.maxRetries) {
       this.setCanditateStatus(audioFile, VoxStatusItemStatus.FAILED);
       new Notice(`Failed to transcribe "${audioFile.filename}" after ${this.settings.maxRetries} attempts.`);
       // Don't pause the queue - let it continue with other files
@@ -261,7 +265,8 @@ export class TranscriptionProcessor {
     }
 
     // Calculate backoff delay using geometric progression: base * 2^retry_count
-    const delay = this.calculateBackoffDelay(retryCount);
+    // Use currentRetryCount (before increment) for delay calculation to start with base delay
+    const delay = this.calculateBackoffDelay(currentRetryCount);
     
     this.logger.log(`Will retry "${audioFile.filename}" in ${Math.round(delay / 1000)} seconds...`);
     
