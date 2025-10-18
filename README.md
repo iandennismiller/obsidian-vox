@@ -215,6 +215,44 @@ The mock server returns realistic test data instantly, perfect for plugin develo
 
 For more details, see the [whisper.cpp documentation](https://github.com/ggerganov/whisper.cpp).
 
+## Local Audio Transcoding
+
+VOX now performs all audio format conversion locally using [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm), eliminating the need for server-side audio processing. This provides several benefits:
+
+### Benefits of Local Transcoding
+
+- 🔒 **Privacy**: Audio files are never uploaded for format conversion
+- ⚡ **Speed**: No network latency for format conversion
+- 💾 **Efficiency**: Reduces bandwidth usage
+- 🎯 **Reliability**: No dependency on external conversion services
+
+### How It Works
+
+When you place an audio file in the watch directory:
+
+1. **Detection**: VOX detects the new audio file
+2. **Local Conversion**: If needed, ffmpeg.wasm converts the audio to the desired format (e.g., MP3 to WAV)
+3. **Transcription**: The converted audio is sent to whisper.cpp for transcription
+4. **Storage**: Both the converted audio and transcript are saved to your vault
+
+### Supported Formats
+
+VOX supports the following audio input formats:
+- `.mp3`
+- `.wav`
+- `.m4a`
+- `.aac`
+- `.ogg`
+
+### WAV Format for Whisper.cpp
+
+When using whisper.cpp (self-hosted mode), VOX automatically converts audio files to WAV format with the following specifications:
+- **Sample Rate**: 16kHz (optimal for whisper.cpp)
+- **Channels**: Mono
+- **Encoding**: 16-bit PCM
+
+These settings ensure optimal transcription quality and performance with whisper.cpp.
+
 ---
 
 ### Legacy Public API
