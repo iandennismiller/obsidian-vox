@@ -16,7 +16,6 @@ export class LocalWhisperTranscriber {
   constructor(
     private modelPath: string,
     private logger: Logger,
-    private vaultId: string,
   ) {}
 
   /**
@@ -69,11 +68,10 @@ export class LocalWhisperTranscriber {
       const customCreateModule = async (moduleArg: any = {}) => {
         console.log("[LocalWhisperTranscriber] ===== Creating WASM module with custom config =====");
         
-        // In Obsidian, plugins are always loaded from a predictable path:
-        // app://local/<vault-id>/.obsidian/plugins/<plugin-name>/
-        // We can construct this URL using the vault ID from app.appId
+        // In Obsidian, use app://obsidian.md as the base URL
+        // This is an alias that points to the current vault
         
-        const pluginBaseUrl = `app://local/${this.vaultId}/.obsidian/plugins/vox/`;
+        const pluginBaseUrl = `app://obsidian.md/.obsidian/plugins/vox/`;
         console.log(`[LocalWhisperTranscriber] Constructed plugin base URL: ${pluginBaseUrl}`);
         
         try {
