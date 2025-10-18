@@ -8,7 +8,9 @@ The *unprocessed* directory is watched for new files; upon discovering a new fil
 
 ## Transcription Options
 
-**Self-Hosted (Recommended)**: Use [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for completely private, unlimited, and free transcription on your own machine. See [Self-Hosting with Whisper.cpp](#self-hosting-with-whisper.cpp) for setup instructions.
+**Local Embedded (NEW!)**: Use embedded whisper.cpp WebAssembly for completely private transcription that runs directly in Obsidian. No server setup required! See [Local Embedded Transcription](#local-embedded-transcription) for setup instructions.
+
+**Self-Hosted**: Use [whisper.cpp](https://github.com/ggerganov/whisper.cpp) server for completely private, unlimited, and free transcription on your own machine. See [Self-Hosting with Whisper.cpp](#self-hosting-with-whisper.cpp) for setup instructions.
 
 **Public API**: For quick setup, use the public transcription service (limited to 100 transcriptions per day). Files are only held in memory as buffers and are not saved to disk on the server. No personal information is collected or processed.
 
@@ -133,9 +135,67 @@ In the near-future, VOX will add the open-source Llama model to its backend to f
 
 A built in audio recorder would prompt users for the voice note category and importance rating after a voice note is made, then automatically transcribe it and place it in the right place in their Vault.
 
+## Local Embedded Transcription
+
+VOX now includes **embedded whisper.cpp WebAssembly** for completely private transcription that runs directly in Obsidian - no server setup required! This is the easiest way to get started with private, offline transcription.
+
+### Benefits of Local Embedded Transcription
+
+- 🎯 **Zero Setup**: No need to install or configure a separate server
+- 🔒 **Complete Privacy**: Everything runs in your Obsidian app
+- 💾 **Fully Offline**: No internet connection required
+- 🚀 **Unlimited**: No daily transcription limits
+- 💰 **Free**: No costs or subscriptions
+- ⚡ **Fast**: Optimized WebAssembly for good performance
+
+### Quick Start with Local Embedded Mode
+
+#### 1. Download a Model File
+
+Download a GGML model file from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp/tree/main):
+
+**Recommended models:**
+- **ggml-tiny.bin** (~75 MB) - Fast, good for quick notes
+- **ggml-base.bin** (~142 MB) - Best balance of speed and quality ⭐
+- **ggml-small.bin** (~466 MB) - Higher quality, slower
+
+Save the model file somewhere accessible on your computer.
+
+#### 2. Configure VOX
+
+1. Open Obsidian Settings → VOX
+2. Set **Transcription Mode** to: `Local (Embedded WASM)`
+3. Click **Browse** or enter the path to your downloaded model file
+4. Start transcribing!
+
+### Performance Notes
+
+- **Tiny model**: ~2-3x real-time (transcribe 60s audio in ~20-30s)
+- **Base model**: ~3-4x real-time (transcribe 60s audio in ~30-40s)
+- **Small model**: ~5-6x real-time (transcribe 60s audio in ~50-60s)
+
+Performance depends on your device's CPU. Modern laptops should handle tiny/base models well.
+
+### Troubleshooting
+
+**"Model file not found" error:**
+- Ensure the model file path is correct and accessible
+- Try using an absolute path (e.g., `/Users/yourname/models/ggml-base.bin`)
+- Make sure the file has a `.bin` extension
+
+**Slow transcription:**
+- Try a smaller model (tiny instead of base)
+- Close other applications to free up CPU resources
+- Consider using Remote mode with a whisper.cpp server for faster processing
+
+**Browser compatibility:**
+- Requires modern browser with SharedArrayBuffer and WASM SIMD support
+- Should work in Obsidian desktop on all platforms
+- Mobile support may be limited
+
 ## Self-Hosting with Whisper.cpp
 
-VOX now supports self-hosted transcription using [whisper.cpp](https://github.com/ggerganov/whisper.cpp), giving you complete privacy and control over your voice transcriptions. With self-hosting, your audio files never leave your computer, and you have unlimited transcriptions at no cost.
+VOX also supports self-hosted transcription using a separate [whisper.cpp](https://github.com/ggerganov/whisper.cpp) server, giving you complete privacy and control over your voice transcriptions with faster processing than the embedded mode.
 
 ### Benefits of Self-Hosting
 
@@ -143,9 +203,10 @@ VOX now supports self-hosted transcription using [whisper.cpp](https://github.co
 - 💰 **No Cost**: No subscription or API fees
 - 🚀 **Unlimited**: No daily transcription limits
 - 🎛️ **Control**: Choose your model and parameters
+- ⚡ **Performance**: Faster than embedded mode, can use GPU acceleration
 - ⭐ **Features**: Word-level timestamps and language detection
 
-### Quick Start with Whisper.cpp
+### Quick Start with Whisper.cpp Server
 
 #### 1. Install Whisper.cpp Server
 
@@ -174,9 +235,10 @@ make server
 #### 3. Configure VOX
 
 1. Open Obsidian Settings → VOX
-2. Enable **"Use Self-Hosted Backend"**
-3. Set **"Self Hosted Backend Location"** to: `http://127.0.0.1:8080`
-4. Adjust **Whisper Settings** (optional):
+2. Set **Transcription Mode** to: `Remote (Server)`
+3. Enable **"Use Self-Hosted Backend"**
+4. Set **"Self Hosted Backend Location"** to: `http://127.0.0.1:8080`
+5. Adjust **Whisper Settings** (optional):
    - **Temperature**: Controls randomness (0.0 = deterministic)
    - **Temperature Increment**: Fallback increment for retries
 
@@ -203,15 +265,18 @@ For development and testing without installing whisper.cpp:
 ```bash
 # Start the mock server
 node project/mock-whisper-server.js
-
-# Configure VOX to use: http://127.0.0.1:8081
 ```
+
+Then in VOX settings:
+1. Set **Transcription Mode** to: `Remote (Server)`
+2. Enable **"Use Self-Hosted Backend"**
+3. Set **"Self Hosted Backend Location"** to: `http://127.0.0.1:8081`
 
 The mock server returns realistic test data instantly, perfect for plugin development.
 
 ### Troubleshooting
 
-**Connection Issues**
+**Server Connection Issues**
 - Ensure whisper.cpp server is running
 - Verify the URL and port in VOX settings
 - Check firewall settings for localhost connections
@@ -238,8 +303,24 @@ For more details, see the [whisper.cpp documentation](https://github.com/ggergan
 
 ---
 
+## Comparison: Local Embedded vs Remote Server
+
+| Feature | Local Embedded | Remote Server | Public API |
+|---------|---------------|---------------|------------|
+| **Setup** | Download model only | Install whisper.cpp server | No setup |
+| **Privacy** | ✅ Complete | ✅ Complete | ⚠️ Limited |
+| **Speed** | ⚡ Good | ⚡⚡ Faster (can use GPU) | ⚡⚡⚡ Fastest |
+| **Offline** | ✅ Yes | ✅ Yes | ❌ No |
+| **Limits** | ♾️ Unlimited | ♾️ Unlimited | 100/day |
+| **Cost** | 💰 Free | 💰 Free | 💰 Free |
+| **CPU Usage** | 🔥 Medium | 🔥 High (on server) | 🔥 None |
+| **Best For** | Quick setup, privacy | Power users, batch processing | Testing, light use |
+
 ### Legacy Public API
 
-The original cloud transcription service is still available with a limit of 100 transcriptions per day. Simply leave "Use Self-Hosted Backend" disabled to use the public API.
+The original cloud transcription service is still available with a limit of 100 transcriptions per day. To use it:
+
+1. Set **Transcription Mode** to: `Remote (Server)`
+2. Leave **"Use Self-Hosted Backend"** disabled
 
 *Note: The transcription model is fine-tuned for English and may struggle with other languages.*

@@ -10,8 +10,10 @@ import { AudioOutputExtension } from "../../src/types";
 // Define the expected Settings interface for testing
 interface Settings {
   apiKey: string;
+  transcriptionMode: "remote" | "local";
   isSelfHosted: boolean;
   selfHostedEndpoint: string;
+  localModelPath: string;
   recordingDeviceId: string | null;
   watchDirectory: string;
   outputDirectory: string;
@@ -31,8 +33,10 @@ interface Settings {
 // Expected default settings based on implementation
 const EXPECTED_DEFAULT_SETTINGS: Settings = {
   apiKey: "",
+  transcriptionMode: "remote",
   isSelfHosted: false,
   selfHostedEndpoint: "",
+  localModelPath: "",
   recordingDeviceId: null,
   audioOutputExtension: AudioOutputExtension.MP3,
   outputDirectory: "Voice",
@@ -64,6 +68,11 @@ describe("Settings Structure", () => {
     it("should have correct self-hosting defaults", () => {
       expect(EXPECTED_DEFAULT_SETTINGS.isSelfHosted).toBe(false);
       expect(EXPECTED_DEFAULT_SETTINGS.selfHostedEndpoint).toBe("");
+    });
+
+    it("should have correct transcription mode defaults", () => {
+      expect(EXPECTED_DEFAULT_SETTINGS.transcriptionMode).toBe("remote");
+      expect(EXPECTED_DEFAULT_SETTINGS.localModelPath).toBe("");
     });
 
     it("should have correct general defaults", () => {
@@ -141,6 +150,28 @@ describe("Settings Structure", () => {
       expect(settings.isSelfHosted).toBe(false);
       expect(settings.apiKey).toBe("test-api-key");
     });
+
+    it("should support local transcription mode", () => {
+      const settings: Partial<Settings> = {
+        transcriptionMode: "local",
+        localModelPath: "/path/to/ggml-base.bin",
+      };
+
+      expect(settings.transcriptionMode).toBe("local");
+      expect(settings.localModelPath).toBe("/path/to/ggml-base.bin");
+    });
+
+    it("should support remote transcription mode", () => {
+      const settings: Partial<Settings> = {
+        transcriptionMode: "remote",
+        isSelfHosted: true,
+        selfHostedEndpoint: "http://localhost:8080",
+      };
+
+      expect(settings.transcriptionMode).toBe("remote");
+      expect(settings.isSelfHosted).toBe(true);
+      expect(settings.selfHostedEndpoint).toBe("http://localhost:8080");
+    });
   });
 
   describe("Temperature Validation", () => {
@@ -178,6 +209,18 @@ describe("Settings Structure", () => {
       expect(settings).toHaveProperty("selfHostedEndpoint");
       expect(typeof settings.isSelfHosted).toBe("boolean");
       expect(typeof settings.selfHostedEndpoint).toBe("string");
+    });
+
+    it("should have all required transcription mode fields", () => {
+      const settings: Settings = EXPECTED_DEFAULT_SETTINGS;
+
+      expect(settings).toHaveProperty("transcriptionMode");
+      expect(settings).toHaveProperty("localModelPath");
+      expect(typeof settings.transcriptionMode).toBe("string");
+      expect(typeof settings.localModelPath).toBe("string");
+      
+      // Ensure transcriptionMode is one of the allowed values
+      expect(["local", "remote"]).toContain(settings.transcriptionMode);
     });
   });
 });
