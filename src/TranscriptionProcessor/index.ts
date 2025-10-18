@@ -154,9 +154,7 @@ export class TranscriptionProcessor {
     if (!this.localTranscriber) {
       this.localTranscriber = new LocalWhisperTranscriber(
         this.settings.localModelPath, 
-        this.logger,
-        this.app,
-        this.plugin.manifest.id
+        this.logger
       );
     }
     

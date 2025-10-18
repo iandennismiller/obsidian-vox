@@ -1,7 +1,7 @@
 import createModule from "@transcribe/shout";
 import { FileTranscriber } from "@transcribe/transcriber";
 import { readFile } from "fs/promises";
-import { App, Notice } from "obsidian";
+import { Notice } from "obsidian";
 import { FileDetail, TranscriptionResponse } from "types";
 import { Logger } from "utils/log";
 
@@ -16,8 +16,6 @@ export class LocalWhisperTranscriber {
   constructor(
     private modelPath: string,
     private logger: Logger,
-    private app: App,
-    private pluginId: string,
   ) {}
 
   /**
@@ -70,37 +68,23 @@ export class LocalWhisperTranscriber {
       const customCreateModule = async (moduleArg: any = {}) => {
         console.log("[LocalWhisperTranscriber] ===== Creating WASM module with custom config =====");
         
-        // Use Obsidian's vault adapter to get the base path
-        // The vault adapter's basePath gives us the filesystem path to the vault
-        const adapter = this.app.vault.adapter;
-        let workerUrl: string;
+        // Embed the worker code as a Blob URL to avoid file:// sandboxing issues
+        // The worker file is extremely small and can be embedded inline
+        const workerCode = `"use strict";var Module={};var initializedJS=false;function threadPrintErr(...args){var text=args.join(" ");console.error(text)}function threadAlert(...args){var text=args.join(" ");postMessage({cmd:"alert",text:text,threadId:Module["_pthread_self"]()})}var err=threadPrintErr;self.alert=threadAlert;Module["instantiateWasm"]=(info,receiveInstance)=>{var module=Module["wasmModule"];Module["wasmModule"]=null;var instance=new WebAssembly.Instance(module,info);return receiveInstance(instance)};self.onunhandledrejection=e=>{throw e.reason||e};function handleMessage(e){try{if(e.data.cmd==="load"){let messageQueue=[];self.onmessage=e=>messageQueue.push(e);self.startWorker=instance=>{Module=instance;postMessage({"cmd":"loaded"});for(let msg of messageQueue){handleMessage(msg)}self.onmessage=handleMessage};Module["wasmModule"]=e.data.wasmModule;for(const handler of e.data.handlers){Module[handler]=(...args)=>{postMessage({cmd:"callHandler",handler:handler,args:args})}}Module["wasmMemory"]=e.data.wasmMemory;Module["buffer"]=Module["wasmMemory"].buffer;Module["ENVIRONMENT_IS_PTHREAD"]=true;(e.data.urlOrBlob?import(e.data.urlOrBlob):import("./shout.wasm.js")).then(exports=>exports.default(Module))}else if(e.data.cmd==="run"){Module["__emscripten_thread_init"](e.data.pthread_ptr);Module["__emscripten_thread_mailbox_await"](e.data.pthread_ptr);Module["establishStackSpace"]();Module["PThread"].threadInitTLS();if(!initializedJS){Module["__embind_initialize_bindings"]();initializedJS=true}try{Module["invokeEntryPoint"](e.data.start_routine,e.data.arg)}catch(ex){if(ex!="unwind"){throw ex}}}else if(e.data.cmd==="cancel"){if(Module["_pthread_self"]()){Module["__emscripten_thread_exit"](e.data.exitCode)}}else if(e.data.target==="setimmediate"){}else if(e.data.cmd==="checkMailbox"){if(initializedJS){Module["checkMailbox"]()}}else if(e.data.cmd){err(\`worker.js received unknown command \${e.data.cmd}\`);err(e.data)}}catch(ex){Module["__emscripten_thread_crashed"]?.();throw ex}}self.onmessage=handleMessage;`;
         
-        // @ts-ignore - accessing basePath which exists but isn't in public types
-        if (adapter.basePath) {
-          // @ts-ignore
-          const basePath = adapter.basePath;
-          console.log(`[LocalWhisperTranscriber] Vault base path: ${basePath}`);
-          
-          // Construct the file:// URL to the worker file in the plugin directory
-          // The worker file is at: <vault>/.obsidian/plugins/vox/shout.wasm.worker.mjs
-          const workerFilePath = `${basePath}/.obsidian/plugins/${this.pluginId}/shout.wasm.worker.mjs`;
-          workerUrl = `file://${workerFilePath}`;
-          
-          console.log(`[LocalWhisperTranscriber] Constructed worker file path: ${workerFilePath}`);
-          console.log(`[LocalWhisperTranscriber] Constructed worker URL: ${workerUrl}`);
-        } else {
-          // Fallback to app://obsidian.md if basePath is not available
-          workerUrl = `app://obsidian.md/.obsidian/plugins/${this.pluginId}/shout.wasm.worker.mjs`;
-          console.warn(`[LocalWhisperTranscriber] Could not access vault basePath, using fallback URL: ${workerUrl}`);
-        }
+        // Create a Blob URL from the worker code
+        const workerBlob = new Blob([workerCode], { type: "application/javascript" });
+        const workerUrl = URL.createObjectURL(workerBlob);
+        
+        console.log(`[LocalWhisperTranscriber] Created worker Blob URL: ${workerUrl}`);
+        console.log(`[LocalWhisperTranscriber] Worker code size: ${workerCode.length} bytes`);
         
         try {
-          
-          console.log(`[LocalWhisperTranscriber] *** SETTING pthreadMainJs to: ${workerUrl} ***`);
+          console.log(`[LocalWhisperTranscriber] *** SETTING pthreadMainJs to Blob URL ***`);
           moduleArg.pthreadMainJs = workerUrl;
           console.log(`[LocalWhisperTranscriber] Verification - moduleArg.pthreadMainJs = ${moduleArg.pthreadMainJs}`);
         } catch (error) {
-          console.error(`[LocalWhisperTranscriber] Error constructing worker URL:`, error);
+          console.error(`[LocalWhisperTranscriber] Error setting worker URL:`, error);
         }
         
         // Provide locateFile to help Emscripten find other files if needed
