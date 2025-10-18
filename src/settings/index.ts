@@ -59,7 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
   recordingDeviceId: null,
 
-  audioOutputExtension: AudioOutputExtension.MP3,
+  audioOutputExtension: AudioOutputExtension.WAV, // Fixed to WAV for whisper.cpp
   outputDirectory: "Voice",
   watchDirectory: "Voice/unprocessed",
   commitMessageTemplate: "🤖 {datetime} Transcribed {amount} File(s)",
@@ -195,18 +195,20 @@ export class VoxSettingTab extends PluginSettingTab {
   }
 
   addAudioExtension(): void {
-    new Setting(this.containerEl)
-      .setName("Audio Output Extension")
-      .setDesc("Audio files linked from your output transcription will be converted to this format.")
-      .addDropdown((cb) => {
-        cb.addOption(AudioOutputExtension.MP3, AudioOutputExtension.MP3.toUpperCase());
-        cb.addOption(AudioOutputExtension.WAV, AudioOutputExtension.WAV.toUpperCase());
+    const description = document.createDocumentFragment();
+    description.append(
+      "Audio files are automatically converted to WAV format for whisper.cpp transcription.",
+      description.createEl("br"),
+      "The WAV format is required by the whisper.cpp server and ensures optimal transcription quality."
+    );
 
-        cb.setValue(this.plugin.settings.audioOutputExtension);
-        cb.onChange((newExtension: AudioOutputExtension) => {
-          this.plugin.settings.audioOutputExtension = newExtension;
-          this.plugin.saveSettings();
-        });
+    new Setting(this.containerEl)
+      .setName("Audio Output Format")
+      .setDesc(description)
+      .addDropdown((cb) => {
+        cb.addOption(AudioOutputExtension.WAV, AudioOutputExtension.WAV.toUpperCase());
+        cb.setValue(AudioOutputExtension.WAV);
+        cb.setDisabled(true); // WAV is required for whisper.cpp
       });
   }
 
