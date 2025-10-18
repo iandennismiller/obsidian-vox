@@ -16,6 +16,7 @@ export class LocalWhisperTranscriber {
   constructor(
     private modelPath: string,
     private logger: Logger,
+    private vaultId: string,
   ) {}
 
   /**
@@ -68,51 +69,22 @@ export class LocalWhisperTranscriber {
       const customCreateModule = async (moduleArg: any = {}) => {
         console.log("[LocalWhisperTranscriber] ===== Creating WASM module with custom config =====");
         
-        // In Obsidian, plugins are loaded from app://local/<vault-id>/.obsidian/plugins/<plugin-name>/
-        // We need to find our plugin's base URL to locate the worker file
+        // In Obsidian, plugins are always loaded from a predictable path:
+        // app://local/<vault-id>/.obsidian/plugins/<plugin-name>/
+        // We can construct this URL using the vault ID from app.appId
         
-        let pluginBaseUrl: string | null = null;
+        const pluginBaseUrl = `app://local/${this.vaultId}/.obsidian/plugins/vox/`;
+        console.log(`[LocalWhisperTranscriber] Constructed plugin base URL: ${pluginBaseUrl}`);
         
-        // Try to find our script's URL by looking for script tags
-        if (typeof document !== 'undefined') {
-          const scripts = document.getElementsByTagName('script');
-          for (let i = 0; i < scripts.length; i++) {
-            const src = scripts[i].src;
-            // Look for a script that contains 'plugins/vox' or 'plugins' with '.obsidian'
-            if (src && (src.includes('/plugins/vox/') || (src.includes('.obsidian') && src.includes('/plugins/')))) {
-              console.log(`[LocalWhisperTranscriber] Found potential plugin script: ${src}`);
-              // Extract the base URL (everything up to and including the plugin directory)
-              const match = src.match(/(.*\/plugins\/[^/]+\/)/);
-              if (match) {
-                pluginBaseUrl = match[1];
-                console.log(`[LocalWhisperTranscriber] Extracted plugin base URL: ${pluginBaseUrl}`);
-                break;
-              }
-            }
-          }
-        }
-        
-        // Fallback: try to construct URL from window.location if we couldn't find it
-        if (!pluginBaseUrl && typeof window !== 'undefined' && window.location) {
-          // This is a fallback but likely won't work correctly - log it for debugging
-          console.warn("[LocalWhisperTranscriber] Could not find plugin script URL, using window.location fallback");
-          console.log(`[LocalWhisperTranscriber] window.location.href: ${window.location.href}`);
-          pluginBaseUrl = new URL('./', window.location.href).href;
-        }
-        
-        if (pluginBaseUrl) {
-          try {
-            // The worker file is in the same directory as main.js
-            const workerUrl = new URL('shout.wasm.worker.mjs', pluginBaseUrl).href;
-            
-            console.log(`[LocalWhisperTranscriber] *** SETTING pthreadMainJs to: ${workerUrl} ***`);
-            moduleArg.pthreadMainJs = workerUrl;
-            console.log(`[LocalWhisperTranscriber] Verification - moduleArg.pthreadMainJs = ${moduleArg.pthreadMainJs}`);
-          } catch (error) {
-            console.error(`[LocalWhisperTranscriber] Error constructing worker URL:`, error);
-          }
-        } else {
-          console.error("[LocalWhisperTranscriber] Cannot construct worker URL - could not determine plugin base URL");
+        try {
+          // The worker file is in the same directory as main.js
+          const workerUrl = `${pluginBaseUrl}shout.wasm.worker.mjs`;
+          
+          console.log(`[LocalWhisperTranscriber] *** SETTING pthreadMainJs to: ${workerUrl} ***`);
+          moduleArg.pthreadMainJs = workerUrl;
+          console.log(`[LocalWhisperTranscriber] Verification - moduleArg.pthreadMainJs = ${moduleArg.pthreadMainJs}`);
+        } catch (error) {
+          console.error(`[LocalWhisperTranscriber] Error constructing worker URL:`, error);
         }
         
         // Provide locateFile to help Emscripten find other files if needed
