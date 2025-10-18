@@ -148,14 +148,19 @@ export class TranscriptionProcessor {
   }
 
   private async processFile(audioFile: TranscriptionCandidate) {
+    console.debug(`[Transcription] Processing file: ${audioFile.filename}`);
+    
     try {
       this.setCanditateStatus(audioFile, VoxStatusItemStatus.PROCESSING_AUDIO);
+      console.debug(`[Transcription] Status: PROCESSING_AUDIO`);
       const processedAudio = await this.audioProcessor.transformAudio(audioFile);
 
       this.setCanditateStatus(audioFile, VoxStatusItemStatus.TRANSCRIBING);
+      console.debug(`[Transcription] Status: TRANSCRIBING`);
       const transcribed = await this.transcribe(processedAudio);
 
       if (transcribed && transcribed.segments) {
+        console.debug(`[Transcription] Transcription successful, generating markdown`);
         const markdown = await this.markdownProcessor.generate(audioFile, processedAudio, audioFile.hash, transcribed);
 
         await this.consolidateFiles(audioFile, processedAudio, markdown);
@@ -163,23 +168,18 @@ export class TranscriptionProcessor {
         const notice = `Transcription complete: ${markdown.title}`;
         this.setCanditateStatus(audioFile, VoxStatusItemStatus.COMPLETE);
 
+        console.debug(`[Transcription] Status: COMPLETE`);
         this.logger.log(notice);
         new Notice(notice);
+      } else {
+        // No valid transcription data - treat as error
+        console.warn(`[Transcription] No valid transcription data received`);
+        console.warn(`[Transcription] transcribed:`, transcribed);
+        throw new Error("No valid transcription data received");
       }
     } catch (error: unknown) {
-      this.setCanditateStatus(audioFile, VoxStatusItemStatus.FAILED);
-
-      console.warn(error);
-
-      if (isAxiosError(error)) {
-        if (error.response?.status === HttpStatusCode.TooManyRequests) {
-          new Notice("You've reached your transcription limit for today.");
-        } else {
-          new Notice("Error connecting to transcription host. Please check your settings.");
-        }
-      }
-
-      this.queue.pause();
+      console.warn(`[Transcription] Error during processFile for "${audioFile.filename}"`);
+      this.handleTranscriptionError(audioFile, error);
     }
   }
 
@@ -187,6 +187,9 @@ export class TranscriptionProcessor {
     const host = this.settings.isSelfHosted ? this.settings.selfHostedEndpoint : PUBLIC_API_ENDPOINT;
 
     const url = `${host}/inference`;
+
+    console.debug(`[Transcription] Starting transcription for: ${audioFile.filename}`);
+    console.debug(`[Transcription] Using ${this.settings.isSelfHosted ? 'self-hosted' : 'public'} endpoint: ${url}`);
 
     const mimetype = `audio/${audioFile.extension.replace(".", "")}`;
 
@@ -196,48 +199,179 @@ export class TranscriptionProcessor {
       type: mimetype,
     });
 
-    try {
-      const formData = {
-        file: audioBlobFile,
-        temperature: this.settings.temperature ?? "0.0",
-        temperature_inc: this.settings.temperatureInc ?? "0.2",
-        response_format: "json",
-      };
+    console.debug(`[Transcription] Audio file size: ${audioBinary.byteLength} bytes`);
+    console.debug(`[Transcription] Audio file type: ${mimetype}`);
 
-      const headers: Record<string, string> = {
-        "Content-Type": "multipart/form-data",
-      };
+    const formData = {
+      file: audioBlobFile,
+      temperature: this.settings.temperature ?? "0.0",
+      temperature_inc: this.settings.temperatureInc ?? "0.2",
+      response_format: "json",
+    };
 
-      // Only add API keys if using the public endpoint
-      if (!this.settings.isSelfHosted) {
-        headers[OBSIDIAN_VAULT_ID_HEADER_KEY] = this.app.appId;
-        headers[OBSIDIAN_API_KEY_HEADER_KEY] = this.settings.apiKey;
-      }
+    const headers: Record<string, string> = {
+      "Content-Type": "multipart/form-data",
+    };
 
-      const response = await axios.postForm<TranscriptionResponse>(url, formData, {
-        headers,
-        timeout: 20 * ONE_MINUTE_IN_MS,
-        responseType: "json",
-      });
-
-      if (!response.data || response.status !== 200) {
-        console.warn("Could not transcribe audio:", response);
-
-        new Notice(`There was an issue transcribing audio: "${audioFile.filename}"`);
-      }
-
-      return response.data;
-    } catch (error: unknown) {
-      if (isAxiosError(error)) {
-        console.warn(error);
-        new Notice("Error connecting to transcription host. Please check your settings.");
-      } else {
-        new Notice("There was an issue transcribing file.");
-      }
-
-      this.queue.pause();
-      return null;
+    // Only add API keys if using the public endpoint
+    if (!this.settings.isSelfHosted) {
+      headers[OBSIDIAN_VAULT_ID_HEADER_KEY] = this.app.appId;
+      headers[OBSIDIAN_API_KEY_HEADER_KEY] = this.settings.apiKey;
     }
+
+    console.debug(`[Transcription] Sending request to: ${url}`);
+    console.debug(`[Transcription] Request payload:`, {
+      filename: audioFile.filename,
+      temperature: formData.temperature,
+      temperature_inc: formData.temperature_inc,
+      response_format: formData.response_format,
+    });
+
+    const response = await axios.postForm<TranscriptionResponse>(url, formData, {
+      headers,
+      timeout: 20 * ONE_MINUTE_IN_MS,
+      responseType: "json",
+    });
+
+    console.debug(`[Transcription] Response status: ${response.status}`);
+    console.debug(`[Transcription] Response headers:`, response.headers);
+    console.debug(`[Transcription] Response data keys:`, Object.keys(response.data || {}));
+    console.debug(`[Transcription] Full response data:`, JSON.stringify(response.data, null, 2));
+
+    if (!response.data || response.status !== 200) {
+      console.warn("[Transcription] Invalid response status or missing data");
+      console.warn("[Transcription] Status:", response.status);
+      console.warn("[Transcription] Data:", response.data);
+      throw new Error(`Invalid response status: ${response.status}`);
+    }
+
+    // Validate response has required text field
+    if (!response.data.text) {
+      console.warn("[Transcription] Missing 'text' field in response");
+      console.warn("[Transcription] Response structure:", response.data);
+      throw new Error("Invalid transcription response: missing 'text' field");
+    }
+
+    console.debug(`[Transcription] Text field present, length: ${response.data.text.length}`);
+    console.debug(`[Transcription] Text preview: ${response.data.text.substring(0, 100)}...`);
+
+    // Check if segments field exists
+    if (!response.data.segments) {
+      console.warn("[Transcription] Response missing 'segments' field - this may be expected for some whisper.cpp configurations");
+      console.warn("[Transcription] Available fields:", Object.keys(response.data));
+      console.warn("[Transcription] Will create segments from text field");
+      
+      // Create a single segment from the text if segments are missing
+      response.data.segments = [
+        {
+          id: 0,
+          start: 0,
+          end: 0,
+          text: response.data.text,
+          tokens: [],
+          temperature: 0,
+          avg_logprob: 0,
+          no_speech_prob: 0,
+        },
+      ];
+      
+      console.debug("[Transcription] Created synthetic segment from text field");
+    } else if (!Array.isArray(response.data.segments)) {
+      console.warn("[Transcription] Segments field is not an array");
+      console.warn("[Transcription] Segments type:", typeof response.data.segments);
+      throw new Error("Invalid transcription response: 'segments' field is not an array");
+    } else if (response.data.segments.length === 0) {
+      console.warn("[Transcription] Segments array is empty");
+      console.warn("[Transcription] Response data:", response.data);
+      throw new Error("Transcription returned empty segments array");
+    } else {
+      console.debug(`[Transcription] Segments field present with ${response.data.segments.length} segment(s)`);
+    }
+
+    console.debug("[Transcription] Validation complete - response is valid");
+    return response.data;
+  }
+
+  /**
+   * Handle transcription errors with retry logic and geometric backoff.
+   */
+  private handleTranscriptionError(audioFile: TranscriptionCandidate, error: unknown) {
+    const statusItem = this.state.items[audioFile.hash];
+    const currentRetryCount = statusItem?.retryCount ?? 0;
+
+    // Increment retry count first
+    this.incrementRetryCount(audioFile);
+    
+    // Get the new retry count after incrementing
+    const newRetryCount = currentRetryCount + 1;
+
+    console.warn(`[Transcription] Error occurred for "${audioFile.filename}"`);
+    console.warn(`[Transcription] Attempt ${newRetryCount}/${this.settings.maxRetries}`);
+    console.warn(`[Transcription] Error:`, error);
+
+    if (isAxiosError(error)) {
+      console.debug(`[Transcription] Axios error detected`);
+      console.debug(`[Transcription] Error code:`, error.code);
+      console.debug(`[Transcription] Response status:`, error.response?.status);
+      console.debug(`[Transcription] Response data:`, error.response?.data);
+      
+      if (error.response?.status === HttpStatusCode.TooManyRequests) {
+        console.warn("[Transcription] Rate limit reached (429)");
+        new Notice("You've reached your transcription limit for today.");
+        this.setCanditateStatus(audioFile, VoxStatusItemStatus.FAILED);
+        this.queue.pause();
+        return;
+      } else {
+        new Notice("Error connecting to transcription host. Please check your settings.");
+      }
+    } else if (error instanceof Error) {
+      console.warn(`[Transcription] Error message: ${error.message}`);
+      console.warn(`[Transcription] Error stack:`, error.stack);
+    }
+
+    // Check if we've exceeded max retries (using the NEW count after incrementing)
+    if (newRetryCount >= this.settings.maxRetries) {
+      console.warn(`[Transcription] Max retries (${this.settings.maxRetries}) exceeded for "${audioFile.filename}"`);
+      this.setCanditateStatus(audioFile, VoxStatusItemStatus.FAILED);
+      new Notice(`Failed to transcribe "${audioFile.filename}" after ${this.settings.maxRetries} attempts.`);
+      // Don't pause the queue - let it continue with other files
+      return;
+    }
+
+    // Calculate backoff delay using geometric progression: base * 2^retry_count
+    // Use currentRetryCount (before increment) for delay calculation to start with base delay
+    const delay = this.calculateBackoffDelay(currentRetryCount);
+    
+    console.debug(`[Transcription] Scheduling retry in ${Math.round(delay / 1000)} seconds...`);
+    this.logger.log(`Will retry "${audioFile.filename}" in ${Math.round(delay / 1000)} seconds...`);
+    
+    // Set status back to QUEUED to indicate it will be retried
+    this.setCanditateStatus(audioFile, VoxStatusItemStatus.QUEUED);
+
+    // Schedule retry after backoff delay
+    setTimeout(() => {
+      console.debug(`[Transcription] Executing scheduled retry for "${audioFile.filename}"`);
+      this.queue.add(() => this.processFile(audioFile));
+    }, delay);
+  }
+
+  /**
+   * Calculate geometric backoff delay: min(base * 2^retry_count, max_delay)
+   */
+  private calculateBackoffDelay(retryCount: number): number {
+    const geometricDelay = this.settings.retryBaseDelayMs * Math.pow(2, retryCount);
+    return Math.min(geometricDelay, this.settings.retryMaxDelayMs);
+  }
+
+  /**
+   * Increment the retry count for a file.
+   */
+  private incrementRetryCount(candidate: TranscriptionCandidate) {
+    if (this.state.items[candidate.hash]) {
+      this.state.items[candidate.hash].retryCount += 1;
+      this.state.items[candidate.hash].lastRetryAt = new Date();
+    }
+    this.notifySubscribers();
   }
 
   /**
@@ -317,13 +451,24 @@ export class TranscriptionProcessor {
       if (validUnprocessedCandidates.length < FILE_CHUNK_LIMIT) {
         const candidate = await this.getTranscribedStatus(filepath, transcribedFiles);
 
-        if (!candidate.isTranscribed) {
+        if (!candidate.isTranscribed && !this.hasExceededMaxRetries(candidate)) {
           validUnprocessedCandidates.push(candidate);
         }
       }
     }
 
     return validUnprocessedCandidates;
+  }
+
+  /**
+   * Check if a candidate has exceeded the maximum number of retries.
+   */
+  private hasExceededMaxRetries(candidate: TranscriptionCandidate): boolean {
+    const statusItem = this.state.items[candidate.hash];
+    if (!statusItem) {
+      return false;
+    }
+    return statusItem.retryCount >= this.settings.maxRetries && statusItem.status === VoxStatusItemStatus.FAILED;
   }
 
   public async getTranscribedFiles() {
@@ -398,6 +543,8 @@ export class TranscriptionProcessor {
         addedAt: new Date(),
         finalizedAt,
         status,
+        retryCount: 0,
+        lastRetryAt: null,
       };
     }
 

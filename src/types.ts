@@ -26,6 +26,10 @@ export type VoxStatusItem = {
 
   addedAt: Date;
   finalizedAt: Date | null;
+
+  // Retry tracking
+  retryCount: number;
+  lastRetryAt: Date | null;
 };
 
 /**
