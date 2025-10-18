@@ -59,7 +59,7 @@ export class AudioProcessor {
       this.logger.log(`Converting audio file locally: "${audioFile.filename}"`);
 
       try {
-        // Use ffmpeg.wasm for local audio transcoding
+        // Use ffmpeg-static for local audio transcoding
         const convertedAudio = await this.ffmpegTranscoder.convertAudio(
           audioBinary,
           audioFile.filename,
@@ -68,7 +68,7 @@ export class AudioProcessor {
 
         // Ensure output directory exists and write the converted audio
         await this.vault.adapter.mkdir(outputCachedFileDetail.directory);
-        await this.vault.adapter.writeBinary(outputCachedFileDetail.filepath, convertedAudio.buffer);
+        await this.vault.adapter.writeBinary(outputCachedFileDetail.filepath, convertedAudio);
 
         this.logger.log(`Successfully converted audio file: "${audioFile.filename}"`);
       } catch (error) {

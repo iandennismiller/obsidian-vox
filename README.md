@@ -217,7 +217,7 @@ For more details, see the [whisper.cpp documentation](https://github.com/ggergan
 
 ## Local Audio Transcoding
 
-VOX now performs all audio format conversion locally using [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm), eliminating the need for server-side audio processing. This provides several benefits:
+VOX now performs all audio format conversion locally using [ffmpeg-static](https://github.com/eugeneware/ffmpeg-static), eliminating the need for server-side audio processing. This provides several benefits:
 
 ### Benefits of Local Transcoding
 
@@ -225,15 +225,25 @@ VOX now performs all audio format conversion locally using [ffmpeg.wasm](https:/
 - ⚡ **Speed**: No network latency for format conversion
 - 💾 **Efficiency**: Reduces bandwidth usage
 - 🎯 **Reliability**: No dependency on external conversion services
+- 💻 **Native Performance**: Uses native FFmpeg binaries for optimal speed
 
 ### How It Works
 
 When you place an audio file in the watch directory:
 
 1. **Detection**: VOX detects the new audio file
-2. **Local Conversion**: If needed, ffmpeg.wasm converts the audio to the desired format (e.g., MP3 to WAV)
+2. **Local Conversion**: If needed, ffmpeg-static converts the audio to the desired format (e.g., MP3 to WAV)
 3. **Transcription**: The converted audio is sent to whisper.cpp for transcription
 4. **Storage**: Both the converted audio and transcript are saved to your vault
+5. **No audio data is uploaded for format conversion**
+
+### Technical Implementation
+
+VOX uses **ffmpeg-static**, which bundles native FFmpeg binaries for macOS, Linux, and Windows. This approach:
+- Works reliably in Electron/Obsidian environments
+- Provides native performance without WebAssembly overhead
+- Requires no external dependencies or CDN access after installation
+- Includes platform-specific binaries automatically
 
 ### Supported Formats
 

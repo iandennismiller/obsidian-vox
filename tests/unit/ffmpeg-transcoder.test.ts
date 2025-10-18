@@ -1,20 +1,37 @@
 import { Logger } from "../../src/utils/log";
 
-// Mock @ffmpeg/ffmpeg and @ffmpeg/util since they're browser-only
-jest.mock("@ffmpeg/ffmpeg", () => ({
-  FFmpeg: jest.fn().mockImplementation(() => ({
-    load: jest.fn().mockResolvedValue(undefined),
-    writeFile: jest.fn().mockResolvedValue(undefined),
-    readFile: jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3, 4])),
-    deleteFile: jest.fn().mockResolvedValue(undefined),
-    exec: jest.fn().mockResolvedValue(undefined),
-  })),
+// Mock child_process since we're testing in Node environment
+jest.mock("child_process", () => ({
+  spawn: jest.fn().mockImplementation(() => {
+    const EventEmitter = require("events");
+    const stream = require("stream");
+    
+    const mockProcess = new EventEmitter();
+    mockProcess.stdout = new stream.Readable({
+      read() {
+        this.push(Buffer.from([1, 2, 3, 4]));
+        this.push(null);
+      }
+    });
+    mockProcess.stderr = new stream.Readable({ read() {} });
+    mockProcess.stdin = new stream.Writable({
+      write(chunk: any, encoding: any, callback: any) {
+        if (callback) callback();
+      }
+    });
+    mockProcess.stdin.end = jest.fn();
+    
+    // Simulate successful completion
+    setTimeout(() => {
+      mockProcess.emit("close", 0);
+    }, 10);
+    
+    return mockProcess;
+  }),
 }));
 
-jest.mock("@ffmpeg/util", () => ({
-  toBlobURL: jest.fn().mockResolvedValue("blob:mock-url"),
-  fetchFile: jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3, 4])),
-}));
+// Mock ffmpeg-static to return a dummy path
+jest.mock("ffmpeg-static", () => "/usr/bin/ffmpeg", { virtual: true });
 
 // Import after mocking
 import { FFmpegTranscoder } from "../../src/utils/ffmpegTranscoder";
@@ -37,115 +54,98 @@ describe("FFmpegTranscoder", () => {
       expect(transcoder).toBeInstanceOf(FFmpegTranscoder);
     });
 
-    it("should not be loaded initially", () => {
-      expect(transcoder.isLoaded()).toBe(false);
-    });
-  });
-
-  describe("Loading", () => {
-    it("should mark as loaded after successful load", async () => {
-      await transcoder.load();
-      expect(transcoder.isLoaded()).toBe(true);
-    });
-
-    it("should only load once", async () => {
-      await transcoder.load();
-      await transcoder.load(); // Second call should not reload
-      expect(transcoder.isLoaded()).toBe(true);
-    });
-
-    it("should log successful load", async () => {
-      await transcoder.load();
-      expect(mockLogger.log).toHaveBeenCalledWith("FFmpeg.wasm loaded successfully");
+    it("should be available with ffmpeg binary", () => {
+      expect(transcoder.isAvailable()).toBe(true);
     });
   });
 
   describe("Audio Conversion", () => {
-    beforeEach(async () => {
-      await transcoder.load();
-    });
-
     it("should convert audio to WAV format", async () => {
       const inputBuffer = new ArrayBuffer(1024);
       const result = await transcoder.convertAudio(inputBuffer, "test.mp3", "wav");
 
-      expect(result).toBeInstanceOf(Uint8Array);
+      expect(result).toBeInstanceOf(ArrayBuffer);
+      expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining("Converting test.mp3 to wav format"));
+      expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining("Successfully converted audio to wav"));
     });
 
     it("should convert audio to MP3 format", async () => {
       const inputBuffer = new ArrayBuffer(1024);
       const result = await transcoder.convertAudio(inputBuffer, "test.wav", "mp3");
 
-      expect(result).toBeInstanceOf(Uint8Array);
+      expect(result).toBeInstanceOf(ArrayBuffer);
+      expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining("Converting test.wav to mp3 format"));
     });
 
-    it("should log conversion start", async () => {
+    it("should handle generic format conversions", async () => {
       const inputBuffer = new ArrayBuffer(1024);
-      await transcoder.convertAudio(inputBuffer, "test.mp3", "wav");
+      const result = await transcoder.convertAudio(inputBuffer, "test.mp3", "ogg");
 
-      expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining("Converting test.mp3 to wav format"));
-    });
-
-    it("should log conversion success", async () => {
-      const inputBuffer = new ArrayBuffer(1024);
-      await transcoder.convertAudio(inputBuffer, "test.mp3", "wav");
-
-      expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining("Successfully converted audio to wav"));
-    });
-
-    it("should load ffmpeg automatically if not loaded", async () => {
-      const newTranscoder = new FFmpegTranscoder(mockLogger);
-      expect(newTranscoder.isLoaded()).toBe(false);
-
-      const inputBuffer = new ArrayBuffer(1024);
-      await newTranscoder.convertAudio(inputBuffer, "test.mp3", "wav");
-
-      expect(newTranscoder.isLoaded()).toBe(true);
-    });
-  });
-
-  describe("Unloading", () => {
-    it("should unload ffmpeg", async () => {
-      await transcoder.load();
-      expect(transcoder.isLoaded()).toBe(true);
-
-      await transcoder.unload();
-      expect(transcoder.isLoaded()).toBe(false);
-    });
-
-    it("should log unload", async () => {
-      await transcoder.load();
-      await transcoder.unload();
-
-      expect(mockLogger.log).toHaveBeenCalledWith("FFmpeg.wasm unloaded");
-    });
-
-    it("should handle unload when not loaded", async () => {
-      await transcoder.unload();
-      expect(transcoder.isLoaded()).toBe(false);
+      expect(result).toBeInstanceOf(ArrayBuffer);
     });
   });
 
   describe("Error Handling", () => {
     it("should handle conversion errors gracefully", async () => {
-      // Create a new transcoder with a mock that throws an error
-      const errorTranscoder = new FFmpegTranscoder(mockLogger);
-      await errorTranscoder.load();
+      const { spawn } = require("child_process");
+      
+      // Mock spawn to simulate failure
+      spawn.mockImplementationOnce(() => {
+        const EventEmitter = require("events");
+        const stream = require("stream");
+        
+        const mockProcess = new EventEmitter();
+        mockProcess.stdout = new stream.Readable({ read() {} });
+        mockProcess.stderr = new stream.Readable({
+          read() {
+            this.push(Buffer.from("Error: Invalid format"));
+            this.push(null);
+          }
+        });
+        mockProcess.stdin = new stream.Writable({
+          write(chunk: any, encoding: any, callback: any) {
+            if (callback) callback();
+          }
+        });
+        mockProcess.stdin.end = jest.fn();
+        
+        setTimeout(() => {
+          mockProcess.emit("close", 1); // Non-zero exit code
+        }, 10);
+        
+        return mockProcess;
+      });
 
-      // Mock the internal ffmpeg exec to throw an error
-      const { FFmpeg } = require("@ffmpeg/ffmpeg");
-      FFmpeg.mockImplementationOnce(() => ({
-        load: jest.fn().mockResolvedValue(undefined),
-        writeFile: jest.fn().mockResolvedValue(undefined),
-        readFile: jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3, 4])),
-        deleteFile: jest.fn().mockResolvedValue(undefined),
-        exec: jest.fn().mockRejectedValue(new Error("Conversion failed")),
-      }));
-
-      const errorTranscoder2 = new FFmpegTranscoder(mockLogger);
       const inputBuffer = new ArrayBuffer(1024);
+      await expect(transcoder.convertAudio(inputBuffer, "test.mp3", "wav")).rejects.toThrow("FFmpeg conversion failed");
+    });
 
-      await expect(errorTranscoder2.convertAudio(inputBuffer, "test.mp3", "wav")).rejects.toThrow();
+    it("should handle process errors", async () => {
+      const { spawn } = require("child_process");
+      
+      spawn.mockImplementationOnce(() => {
+        const EventEmitter = require("events");
+        const stream = require("stream");
+        
+        const mockProcess = new EventEmitter();
+        mockProcess.stdout = new stream.Readable({ read() {} });
+        mockProcess.stderr = new stream.Readable({ read() {} });
+        mockProcess.stdin = new stream.Writable({
+          write(chunk: any, encoding: any, callback: any) {
+            if (callback) callback();
+          }
+        });
+        mockProcess.stdin.end = jest.fn();
+        
+        setTimeout(() => {
+          mockProcess.emit("error", new Error("Process spawn error"));
+        }, 10);
+        
+        return mockProcess;
+      });
+
+      const inputBuffer = new ArrayBuffer(1024);
+      await expect(transcoder.convertAudio(inputBuffer, "test.mp3", "wav")).rejects.toThrow("FFmpeg process error");
     });
   });
 });

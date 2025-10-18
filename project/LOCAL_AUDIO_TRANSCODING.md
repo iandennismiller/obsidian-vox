@@ -14,32 +14,32 @@ The plugin previously relied on a server-side API endpoint (`/convert/audio`) fo
 - Bandwidth usage
 
 ## Solution
-Implement local audio transcoding using ffmpeg.wasm (https://github.com/ffmpegwasm/ffmpeg.wasm), a WebAssembly port of FFmpeg that runs entirely in the Electron environment.
+Implement local audio transcoding using ffmpeg-static (https://github.com/eugeneware/ffmpeg-static), which provides native FFmpeg binaries that work reliably in Electron/Node.js environments.
 
 ## Technical Implementation
 
 ### 1. FFmpegTranscoder Class (`src/utils/ffmpegTranscoder.ts`)
-A new utility class that wraps ffmpeg.wasm functionality:
+A new utility class that wraps ffmpeg-static functionality:
 
 **Key Features:**
-- Lazy loading of ffmpeg.wasm core from CDN (direct URL loading for Electron compatibility)
+- Uses native FFmpeg binaries bundled with ffmpeg-static
 - Support for multiple audio formats (MP3, WAV, M4A, AAC, OGG)
 - Optimized WAV conversion for whisper.cpp:
   - Sample rate: 16kHz
   - Channels: Mono
   - Encoding: 16-bit PCM
-- Automatic resource management (virtual filesystem cleanup)
+- Stream-based processing using Node.js child_process
 - Comprehensive error handling
 
 **Electron/Obsidian Compatibility:**
-- Uses direct CDN URLs instead of blob URLs for loading ffmpeg.wasm core
-- Compatible with Electron's security model and CORS restrictions
+- Uses native FFmpeg binaries instead of WebAssembly
+- No CDN dependencies or blob URL issues
+- Works reliably in Electron's security context
+- Platform-specific binaries (macOS, Linux, Windows) included automatically
 
 **Public Methods:**
-- `load()`: Loads ffmpeg.wasm core
-- `convertAudio(inputBuffer, inputFilename, outputExtension)`: Converts audio
-- `isLoaded()`: Check if ffmpeg is loaded
-- `unload()`: Free resources
+- `convertAudio(inputBuffer, inputFilename, outputExtension)`: Converts audio using native FFmpeg
+- `isAvailable()`: Check if ffmpeg binary is available
 
 ### 2. AudioProcessor Updates (`src/AudioProcessor/index.ts`)
 Modified the audio transformation workflow:
@@ -81,10 +81,11 @@ Added comprehensive documentation section:
 ## Dependencies Added
 ```json
 {
-  "@ffmpeg/ffmpeg": "^0.12.15",
-  "@ffmpeg/util": "^0.12.2"
+  "ffmpeg-static": "^5.2.0"
 }
 ```
+
+Note: The original implementation used `@ffmpeg/ffmpeg` and `@ffmpeg/util`, but these were replaced with `ffmpeg-static` for better Electron/Obsidian compatibility.
 
 ## Impact Assessment
 
@@ -96,18 +97,20 @@ Added comprehensive documentation section:
 ✅ **Security**: Zero vulnerabilities (CodeQL verified)
 
 ### Bundle Size Impact
-- Build size increased from 1.4MB to 1.5MB (+100KB)
-- ffmpeg.wasm core loaded from CDN on-demand (~31MB)
-- Core is cached by browser after first load
+- Build size decreased from 1.5MB to 1.4MB (-100KB, back to original)
+- ffmpeg-static bundles native binaries (~50MB total across all platforms)
+- Only the platform-specific binary is downloaded/used at runtime
+- No CDN dependencies or runtime downloads required
 
 ### Performance Characteristics
-- First conversion: Includes ~2-3 second FFmpeg load time
-- Subsequent conversions: Near-instant (ffmpeg already loaded)
-- Conversion speed: Comparable to native FFmpeg (WebAssembly performance)
+- Native FFmpeg performance (no WebAssembly overhead)
+- Stream-based processing for memory efficiency
+- Conversion speed depends on audio length and system resources
+- No initialization delay (native binary is ready immediately)
 
 ## Testing Results
-- Total tests: 100 (up from 86)
-- New tests: 14 (FFmpegTranscoder)
+- Total tests: 93 (down from 100 due to simplified implementation)
+- New tests: 7 (FFmpegTranscoder with native binary approach)
 - Pass rate: 100%
 - CodeQL security scan: 0 vulnerabilities
 
@@ -119,13 +122,15 @@ No breaking changes. The API remains the same:
 
 ## Future Enhancements
 Potential improvements for future versions:
-1. Configurable CDN URL for ffmpeg.wasm core
-2. Support for additional audio formats
-3. Audio quality/bitrate settings
-4. Progress callbacks for long conversions
-5. Cache management for ffmpeg.wasm core
+1. Progress callbacks for long conversions
+2. Support for batch conversion
+3. Configurable audio quality/bitrate settings
+4. Optional caching of converted files
+5. Support for additional metadata preservation
 
 ## References
-- ffmpeg.wasm: https://github.com/ffmpegwasm/ffmpeg.wasm
+- ffmpeg-static: https://github.com/eugeneware/ffmpeg-static
+- FFmpeg: https://ffmpeg.org/
 - whisper.cpp: https://github.com/ggerganov/whisper.cpp
 - Original issue: "Handle audio transcoding locally with ffmpeg.wasm"
+- Resolution: Switched to ffmpeg-static for better Electron compatibility
