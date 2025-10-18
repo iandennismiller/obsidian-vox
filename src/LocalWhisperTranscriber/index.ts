@@ -18,6 +18,13 @@ export class LocalWhisperTranscriber {
   ) {}
 
   /**
+   * Check if the transcriber is initialized and ready to use.
+   */
+  get initialized(): boolean {
+    return this.isInitialized;
+  }
+
+  /**
    * Initialize the WASM transcriber.
    * This needs to be called before transcribing.
    */

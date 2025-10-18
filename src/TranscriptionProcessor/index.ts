@@ -141,7 +141,8 @@ export class TranscriptionProcessor {
       return;
     }
 
-    if (this.localTranscriber) {
+    // Check if transcriber exists AND is initialized
+    if (this.localTranscriber && this.localTranscriber.initialized) {
       return; // Already initialized
     }
 
@@ -149,7 +150,12 @@ export class TranscriptionProcessor {
       throw new Error("Local model path is not configured. Please set it in settings.");
     }
 
-    this.localTranscriber = new LocalWhisperTranscriber(this.settings.localModelPath, this.logger);
+    // Create new transcriber if doesn't exist or reset if exists but not initialized
+    if (!this.localTranscriber) {
+      this.localTranscriber = new LocalWhisperTranscriber(this.settings.localModelPath, this.logger);
+    }
+    
+    // Initialize the transcriber
     await this.localTranscriber.init();
   }
 
