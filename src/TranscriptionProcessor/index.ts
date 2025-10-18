@@ -215,6 +215,18 @@ export class TranscriptionProcessor {
       throw new Error(`Invalid response status: ${response.status}`);
     }
 
+    // Validate response has required fields
+    if (!response.data.text || !response.data.segments || !Array.isArray(response.data.segments)) {
+      console.warn("Invalid transcription response structure:", response.data);
+      throw new Error("Invalid transcription response: missing required fields");
+    }
+
+    // Validate segments array is not empty
+    if (response.data.segments.length === 0) {
+      console.warn("Transcription returned no segments:", response.data);
+      throw new Error("Transcription returned empty segments array");
+    }
+
     return response.data;
   }
 
