@@ -37,6 +37,18 @@ const wasmPlugin = (config) => {
         contents: await fs.promises.readFile(args.path),
         loader: "binary",
       }));
+      
+      // Copy worker files for whisper.cpp WASM
+      build.onEnd(async () => {
+        const workerSource = "node_modules/@transcribe/shout/src/shout/shout.wasm.worker.mjs";
+        const workerDest = "shout.wasm.worker.mjs";
+        try {
+          await fs.promises.copyFile(workerSource, workerDest);
+          console.log("Copied WASM worker file");
+        } catch (error) {
+          console.error("Failed to copy WASM worker:", error);
+        }
+      });
     },
   };
 };

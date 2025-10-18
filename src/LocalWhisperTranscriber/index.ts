@@ -110,7 +110,10 @@ export class LocalWhisperTranscriber {
       const file = new File([blob], audioFile.filename, { type: blob.type });
 
       // Transcribe using the FileTranscriber
-      const result = await this.transcriber.transcribe(file);
+      // Use single thread to avoid worker issues in Electron/Obsidian
+      const result = await this.transcriber.transcribe(file, {
+        threads: 1,
+      });
 
       console.debug(`[LocalWhisperTranscriber] Transcription complete`);
       console.debug(`[LocalWhisperTranscriber] Language: ${result.result.language}`);
