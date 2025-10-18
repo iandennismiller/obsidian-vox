@@ -199,7 +199,7 @@ export class VoxSettingTab extends PluginSettingTab {
     description.append(
       "Audio files are automatically converted to WAV format for whisper.cpp transcription.",
       description.createEl("br"),
-      "The WAV format is required by the whisper.cpp server and ensures optimal transcription quality."
+      "The WAV format is required by the whisper.cpp server and ensures optimal transcription quality.",
     );
 
     new Setting(this.containerEl)
@@ -679,7 +679,9 @@ export class VoxSettingTab extends PluginSettingTab {
 
     new Setting(this.containerEl)
       .setName("File Stability Check Interval (ms)")
-      .setDesc("How often to check if file size has changed. Lower values detect changes faster but use more resources.")
+      .setDesc(
+        "How often to check if file size has changed. Lower values detect changes faster but use more resources.",
+      )
       .addText((cb) => {
         cb.inputEl.setAttrs({
           type: "number",

@@ -4,12 +4,7 @@ import { Settings } from "settings";
 import { FileDetail } from "types";
 import { extractFileDetail, getFileCreationDateTime } from "utils/format";
 import { Logger } from "utils/log";
-import {
-  CACHE_DIRECTORY,
-  CATEGORY_REGEX_LEGACY,
-  FILENAME_DATE_FORMAT,
-  generateCategoryRegex,
-} from "../constants";
+import { CACHE_DIRECTORY, CATEGORY_REGEX_LEGACY, FILENAME_DATE_FORMAT, generateCategoryRegex } from "../constants";
 import { LocalAudioConverter } from "./LocalAudioConverter";
 
 export class AudioProcessor {
@@ -19,7 +14,7 @@ export class AudioProcessor {
     private readonly appId: string,
     private readonly vault: Vault,
     private settings: Settings,
-    private readonly logger: Logger
+    private readonly logger: Logger,
   ) {
     this.localConverter = new LocalAudioConverter(logger);
   }
@@ -31,13 +26,13 @@ export class AudioProcessor {
    * @note
    * We hash the incoming audio file to keep track of where it has been transcribed;
    * ensuring that with filename changes, we can still determine its status.
-   * 
+   *
    * Audio conversion is now handled locally using WASM decoders for privacy and performance.
    */
   public async transformAudio(audioFile: FileDetail): Promise<FileDetail> {
     // Is this actually an audio file?
     const validInputExtensions = [".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"];
-    
+
     // For whisper.cpp, we always need WAV format
     const desiredExtension = ".wav";
 
@@ -70,12 +65,12 @@ export class AudioProcessor {
 
         await this.vault.adapter.mkdir(outputCachedFileDetail.directory);
         await this.vault.adapter.writeBinary(outputCachedFileDetail.filepath, convertedAudio);
-        
+
         this.logger.log(`Successfully converted "${audioFile.filename}" to WAV`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         const userError = `Failed to convert audio file: ${errorMsg}`;
-        
+
         this.logger.log(userError);
         new Notice(userError);
         throw new Error(userError);

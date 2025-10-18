@@ -15,7 +15,7 @@ export class LocalAudioConverter {
   /**
    * Convert an audio file to WAV format required by whisper.cpp server.
    * Supports MP3, OGG, FLAC, and WAV (pass-through) formats.
-   * 
+   *
    * @param audioBinary - The input audio file as an ArrayBuffer
    * @param extension - The file extension (e.g., ".mp3", ".ogg")
    * @returns ArrayBuffer containing the WAV file data
@@ -29,7 +29,9 @@ export class LocalAudioConverter {
       return audioBinary;
     }
 
-    this.logger.log(`Converting ${normalizedExt.toUpperCase()} to WAV format`);
+    this.logger.log(
+      `Starting local conversion: ${normalizedExt.toUpperCase()} -> WAV (${(audioBinary.byteLength / 1024 / 1024).toFixed(2)} MB)`,
+    );
 
     let audioData: AudioData;
 
@@ -52,20 +54,25 @@ export class LocalAudioConverter {
           // For now, throw an error to indicate unsupported format
           throw new Error(
             `${normalizedExt.toUpperCase()} format is not yet supported for local conversion. ` +
-            "Please convert to MP3, OGG, FLAC, or WAV format first."
+              "Please convert to MP3, OGG, FLAC, or WAV format first.",
           );
         default:
           throw new Error(`Unsupported audio format: ${normalizedExt}`);
       }
 
+      this.logger.log(
+        `Decoded ${normalizedExt.toUpperCase()}: ${audioData.channelData.length} channels, ${audioData.sampleRate} Hz`,
+      );
+
       // Encode to WAV
       const wavData = await this.encodeToWav(audioData);
-      this.logger.log(`Successfully converted ${normalizedExt.toUpperCase()} to WAV`);
-      
+      this.logger.log(`Successfully converted to WAV (${(wavData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+
       return wavData;
     } catch (error) {
-      this.logger.log(`Error converting audio: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.log(`Error converting audio: ${errorMsg}`);
+      throw new Error(`Audio conversion failed: ${errorMsg}`);
     }
   }
 
@@ -77,15 +84,18 @@ export class LocalAudioConverter {
     await decoder.ready;
 
     const uint8Array = new Uint8Array(audioBinary);
-    const decoded = await decoder.decode(uint8Array);
+    const result = await decoder.decode(uint8Array);
 
-    if (!decoded || !decoded.channelData || decoded.channelData.length === 0) {
+    if (!result || !result.channelData || result.channelData.length === 0) {
       throw new Error("Failed to decode MP3: no audio data returned");
     }
 
+    // Free decoder resources
+    decoder.free();
+
     return {
-      sampleRate: decoded.sampleRate,
-      channelData: decoded.channelData,
+      sampleRate: result.sampleRate,
+      channelData: result.channelData,
     };
   }
 
@@ -97,15 +107,18 @@ export class LocalAudioConverter {
     await decoder.ready;
 
     const uint8Array = new Uint8Array(audioBinary);
-    const decoded = await decoder.decode(uint8Array);
+    const result = await decoder.decode(uint8Array);
 
-    if (!decoded || !decoded.channelData || decoded.channelData.length === 0) {
+    if (!result || !result.channelData || result.channelData.length === 0) {
       throw new Error("Failed to decode OGG: no audio data returned");
     }
 
+    // Free decoder resources
+    decoder.free();
+
     return {
-      sampleRate: decoded.sampleRate,
-      channelData: decoded.channelData,
+      sampleRate: result.sampleRate,
+      channelData: result.channelData,
     };
   }
 
@@ -117,15 +130,18 @@ export class LocalAudioConverter {
     await decoder.ready;
 
     const uint8Array = new Uint8Array(audioBinary);
-    const decoded = await decoder.decode(uint8Array);
+    const result = await decoder.decode(uint8Array);
 
-    if (!decoded || !decoded.channelData || decoded.channelData.length === 0) {
+    if (!result || !result.channelData || result.channelData.length === 0) {
       throw new Error("Failed to decode FLAC: no audio data returned");
     }
 
+    // Free decoder resources
+    decoder.free();
+
     return {
-      sampleRate: decoded.sampleRate,
-      channelData: decoded.channelData,
+      sampleRate: result.sampleRate,
+      channelData: result.channelData,
     };
   }
 
