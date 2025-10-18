@@ -8,13 +8,19 @@ import { FolderSuggest } from "./suggesters/FolderSuggester";
 const TAG_SETTINGS_CLASS = "st-tag-setting";
 const CATEGORIZATION_SETTINGS_CLASS = "st-cate-setting";
 const SELF_HOSTING_CLASS = "self-host-setting";
+const LOCAL_MODE_CLASS = "local-mode-setting";
 const HIDDEN_CLASS = "st-hidden";
 
 export interface Settings {
   apiKey: string;
 
+  // Transcription mode: "remote", "local"
+  transcriptionMode: "remote" | "local";
   isSelfHosted: boolean;
   selfHostedEndpoint: string;
+
+  // Local whisper.cpp WASM settings
+  localModelPath: string; // Path to the ggml model file
 
   recordingDeviceId: string | null;
 
@@ -54,8 +60,11 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   apiKey: "",
 
+  transcriptionMode: "remote",
   isSelfHosted: false,
   selfHostedEndpoint: "",
+
+  localModelPath: "", // User must download and specify a model file
 
   recordingDeviceId: null,
 
@@ -119,13 +128,16 @@ export class VoxSettingTab extends PluginSettingTab {
     this.addTags();
     this.addCategorisation();
 
+    this.addCategoryHeading("Transcription Mode");
+    this.addTranscriptionModeToggle();
+    this.addSelfHostToggle();
+    this.addLocalModelSettings();
+
     this.addCategoryHeading("Whisper Settings");
     this.addWhisperSettings();
 
     this.addCategoryHeading("File Watching Settings");
     this.addFileWatchingSettings();
-
-    this.addSelfHostToggle();
   }
 
   addCategoryHeading(category: string, margin = false): void {
@@ -550,20 +562,142 @@ export class VoxSettingTab extends PluginSettingTab {
     categoryMapSetting.infoEl.remove();
   }
 
-  addSelfHostToggle(): void {
-    new Setting(this.containerEl).setName("Use Self-Hosted Backend").addToggle((cb) => {
-      cb.setValue(this.plugin.settings.isSelfHosted);
-      cb.onChange((selfHosted) => {
-        this.plugin.settings.isSelfHosted = selfHosted;
-        this.plugin.saveSettings();
+  addTranscriptionModeToggle(): void {
+    const description = document.createDocumentFragment();
+    description.append(
+      "Choose between local (embedded WASM) or remote transcription.",
+      description.createEl("br"),
+      description.createEl("strong", { text: "Local:" }),
+      " Uses embedded whisper.cpp WASM for privacy-focused transcription. Runs entirely in your browser.",
+      description.createEl("br"),
+      description.createEl("strong", { text: "Remote:" }),
+      " Uses a remote server (self-hosted or public API).",
+    );
 
-        this.toggleSettingsVisibility(SELF_HOSTING_CLASS, selfHosted);
+    new Setting(this.containerEl)
+      .setName("Transcription Mode")
+      .setDesc(description)
+      .addDropdown((cb) => {
+        cb.addOption("local", "Local (Embedded WASM)");
+        cb.addOption("remote", "Remote (Server)");
+        cb.setValue(this.plugin.settings.transcriptionMode);
+        cb.onChange((mode: "local" | "remote") => {
+          this.plugin.settings.transcriptionMode = mode;
+          this.plugin.saveSettings();
+
+          // Toggle visibility of mode-specific settings
+          this.toggleSettingsVisibility(LOCAL_MODE_CLASS, mode === "local");
+          this.toggleSettingsVisibility(SELF_HOSTING_CLASS, mode === "remote" && this.plugin.settings.isSelfHosted);
+          
+          // Show/hide self-host toggle based on mode
+          const selfHostToggle = document.querySelector('.self-host-toggle');
+          if (selfHostToggle) {
+            if (mode === "remote") {
+              selfHostToggle.removeClass(HIDDEN_CLASS);
+            } else {
+              selfHostToggle.addClass(HIDDEN_CLASS);
+            }
+          }
+        });
       });
+  }
+
+  addLocalModelSettings(): void {
+    const description = document.createDocumentFragment();
+    description.append(
+      "Path to your local GGML model file. Download models from ",
+      description.createEl("a", {
+        text: "Hugging Face",
+        href: "https://huggingface.co/ggerganov/whisper.cpp/tree/main",
+      }),
+      ".",
+      description.createEl("br"),
+      "Recommended: ",
+      description.createEl("code", { text: "ggml-base.bin", cls: "st-inline-code" }),
+      " or ",
+      description.createEl("code", { text: "ggml-tiny.bin", cls: "st-inline-code" }),
+      " for best performance.",
+    );
+
+    const containerEl = this.containerEl.createEl("div", {
+      cls: [LOCAL_MODE_CLASS],
     });
+
+    new Setting(containerEl)
+      .setName("Local Model File Path")
+      .setDesc(description)
+      .addText((cb) => {
+        cb.setPlaceholder("/path/to/ggml-base.bin");
+        cb.setValue(this.plugin.settings.localModelPath);
+        cb.onChange((path) => {
+          this.plugin.settings.localModelPath = path;
+          this.plugin.saveSettings();
+        });
+      })
+      .addButton((cb) => {
+        cb.setButtonText("Browse");
+        cb.onClick(async () => {
+          // In Electron/Obsidian, we can use the file picker
+          try {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".bin";
+            input.onchange = (e: Event) => {
+              const target = e.target as HTMLInputElement;
+              if (target.files && target.files[0]) {
+                this.plugin.settings.localModelPath = target.files[0].path || target.files[0].name;
+                this.plugin.saveSettings();
+                this.display();
+              }
+            };
+            input.click();
+          } catch (error) {
+            console.error("Error selecting model file:", error);
+            new Notice("Error selecting model file. Please enter the path manually.");
+          }
+        });
+      });
+
+    // Add note about model size
+    const noteEl = containerEl.createEl("div", {
+      cls: "setting-item-description",
+    });
+    noteEl.style.marginTop = "0.5rem";
+    noteEl.style.fontSize = "0.9em";
+    noteEl.style.color = "var(--text-muted)";
+    noteEl.innerHTML = `
+      <strong>Note:</strong> Local transcription requires a GGML model file downloaded to your computer.
+      Model sizes: tiny (~75MB), base (~142MB), small (~466MB).
+    `;
+
+    this.toggleSettingsVisibility(LOCAL_MODE_CLASS, this.plugin.settings.transcriptionMode === "local");
+  }
+
+  addSelfHostToggle(): void {
+    const selfHostToggleSetting = new Setting(this.containerEl)
+      .setName("Use Self-Hosted Backend")
+      .setClass("self-host-toggle")
+      .addToggle((cb) => {
+        cb.setValue(this.plugin.settings.isSelfHosted);
+        cb.onChange((selfHosted) => {
+          this.plugin.settings.isSelfHosted = selfHosted;
+          this.plugin.saveSettings();
+
+          this.toggleSettingsVisibility(SELF_HOSTING_CLASS, selfHosted);
+        });
+      });
+
+    // Hide self-host toggle if local mode is selected
+    if (this.plugin.settings.transcriptionMode === "local") {
+      selfHostToggleSetting.settingEl.addClass(HIDDEN_CLASS);
+    }
 
     this.addSelfHostLocation();
 
-    this.toggleSettingsVisibility(SELF_HOSTING_CLASS, this.plugin.settings.isSelfHosted);
+    this.toggleSettingsVisibility(
+      SELF_HOSTING_CLASS,
+      this.plugin.settings.transcriptionMode === "remote" && this.plugin.settings.isSelfHosted
+    );
   }
 
   addWhisperSettings(): void {
