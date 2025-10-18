@@ -1,27 +1,28 @@
-import axios from "axios";
 import { Notice, Vault } from "obsidian";
 import path from "path";
 import { Settings } from "settings";
 import { FileDetail } from "types";
 import { extractFileDetail, getFileCreationDateTime } from "utils/format";
 import { Logger } from "utils/log";
+import { FFmpegTranscoder } from "utils/ffmpegTranscoder";
 import {
   CACHE_DIRECTORY,
   CATEGORY_REGEX_LEGACY,
   FILENAME_DATE_FORMAT,
-  OBSIDIAN_API_KEY_HEADER_KEY,
-  OBSIDIAN_VAULT_ID_HEADER_KEY,
-  PUBLIC_API_ENDPOINT,
   generateCategoryRegex,
 } from "../constants";
 
 export class AudioProcessor {
+  private ffmpegTranscoder: FFmpegTranscoder;
+
   constructor(
     private readonly appId: string,
     private readonly vault: Vault,
     private settings: Settings,
     private readonly logger: Logger
-  ) {}
+  ) {
+    this.ffmpegTranscoder = new FFmpegTranscoder(logger);
+  }
 
   /**
    * Converts a voice note to the desired extension, and generates a filesystem
@@ -30,6 +31,10 @@ export class AudioProcessor {
    * @note
    * We hash the incoming audio file to keep track of where it has been transcribed;
    * ensuring that with filename changes, we can still determine its status.
+   * 
+   * @note
+   * Audio conversion is now performed locally using ffmpeg.wasm, eliminating
+   * the need for server-side audio conversion.
    */
   public async transformAudio(audioFile: FileDetail): Promise<FileDetail> {
     // Is this actually an audio file?
@@ -51,43 +56,27 @@ export class AudioProcessor {
     const shouldConvertFile = audioFile.extension !== desiredExtension;
 
     if (shouldConvertFile) {
-      this.logger.log(`Converting audio file: "${audioFile.filename}"`);
+      this.logger.log(`Converting audio file locally: "${audioFile.filename}"`);
 
-      const host = this.settings.isSelfHosted ? this.settings.selfHostedEndpoint : PUBLIC_API_ENDPOINT;
+      try {
+        // Use ffmpeg.wasm for local audio transcoding
+        const convertedAudio = await this.ffmpegTranscoder.convertAudio(
+          audioBinary,
+          audioFile.filename,
+          this.settings.audioOutputExtension
+        );
 
-      const url = `${host}/convert/audio`;
-      const mimetype = `audio/${this.settings.audioOutputExtension}`;
+        // Ensure output directory exists and write the converted audio
+        await this.vault.adapter.mkdir(outputCachedFileDetail.directory);
+        await this.vault.adapter.writeBinary(outputCachedFileDetail.filepath, convertedAudio.buffer);
 
-      const audioBlob = new Blob([audioBinary], { type: mimetype });
-      const audioBlobFile = new File([audioBlob], audioFile.filename, {
-        type: mimetype,
-      });
-
-      const response = await axios.postForm<Buffer>(
-        url,
-        {
-          format: this.settings.audioOutputExtension,
-          audio_file: audioBlobFile,
-        },
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            [OBSIDIAN_VAULT_ID_HEADER_KEY]: this.appId,
-            [OBSIDIAN_API_KEY_HEADER_KEY]: this.settings.apiKey,
-          },
-          responseType: "arraybuffer",
-        }
-      );
-
-      if (!response.data || response.status !== 200) {
-        const error = "There was an error converting audio during transcription.";
-
-        new Notice(error);
-        throw new Error(error);
+        this.logger.log(`Successfully converted audio file: "${audioFile.filename}"`);
+      } catch (error) {
+        const errorMessage = `Error converting audio file locally: ${error instanceof Error ? error.message : String(error)}`;
+        this.logger.log(errorMessage);
+        new Notice(errorMessage);
+        throw new Error(errorMessage);
       }
-
-      await this.vault.adapter.mkdir(outputCachedFileDetail.directory);
-      await this.vault.adapter.writeBinary(outputCachedFileDetail.filepath, response.data);
     } else {
       const exists = await this.vault.exists(outputCachedFileDetail.filepath);
 

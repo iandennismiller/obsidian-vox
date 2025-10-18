@@ -24,6 +24,8 @@
     "obsidian-md-plugin"
   ],
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@popperjs/core": "^2.11.8",
     "axios": "^1.4.0",
     "clsx": "^2.1.1",
