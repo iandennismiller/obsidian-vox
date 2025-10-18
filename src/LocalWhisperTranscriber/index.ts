@@ -63,8 +63,56 @@ export class LocalWhisperTranscriber {
         throw new Error(`Failed to read model file from ${this.modelPath}: ${errorMsg}`);
       }
 
+      // Create a custom module configuration for Emscripten
+      // This handles worker file location in Obsidian's bundled environment
+      const customCreateModule = async (moduleArg: any = {}) => {
+        console.debug("[LocalWhisperTranscriber] Creating WASM module with custom config");
+        
+        // Provide locateFile to help Emscripten find worker files
+        // In Obsidian/Electron, worker files are bundled in the plugin directory
+        moduleArg.locateFile = (path: string, scriptDirectory: string) => {
+          console.debug(`[LocalWhisperTranscriber] locateFile called:`);
+          console.debug(`  - path: "${path}"`);
+          console.debug(`  - scriptDirectory: "${scriptDirectory}"`);
+          console.debug(`  - window.location.href: "${typeof window !== 'undefined' ? window.location.href : 'N/A'}"`);
+          
+          // For worker files, we need to provide the correct path
+          // In Obsidian, the worker file should be in the plugin directory next to main.js
+          if (path.includes('worker')) {
+            // The worker file is copied to the plugin root by esbuild
+            // We need to construct a proper path/URL for it
+            
+            // Try different approaches based on environment
+            if (typeof window !== 'undefined' && window.location) {
+              // In browser/Electron context, try to use a relative URL
+              const baseUrl = new URL('./', window.location.href);
+              const workerUrl = new URL(path, baseUrl).href;
+              console.debug(`  - Resolved worker URL: "${workerUrl}"`);
+              return workerUrl;
+            }
+          }
+          
+          // For other files, use default behavior
+          const resolvedPath = scriptDirectory + path;
+          console.debug(`  - Resolved path: "${resolvedPath}"`);
+          return resolvedPath;
+        };
+        
+        // Override mainScriptUrlOrBlob to help with worker loading
+        if (typeof document !== 'undefined' && document.currentScript) {
+          const scriptUrl = (document.currentScript as HTMLScriptElement).src;
+          console.debug(`[LocalWhisperTranscriber] Main script URL: ${scriptUrl}`);
+          moduleArg.mainScriptUrlOrBlob = scriptUrl;
+        }
+        
+        console.debug("[LocalWhisperTranscriber] Calling original createModule");
+        const module = await createModule(moduleArg);
+        console.debug("[LocalWhisperTranscriber] createModule completed");
+        return module;
+      };
+
       this.transcriber = new FileTranscriber({
-        createModule,
+        createModule: customCreateModule,
         model: modelData,
         print: (message: string) => {
           console.debug("[Whisper WASM]", message);
@@ -104,16 +152,22 @@ export class LocalWhisperTranscriber {
 
     try {
       console.debug(`[LocalWhisperTranscriber] Starting transcription for: ${audioFile.filename}`);
+      console.debug(`[LocalWhisperTranscriber] Audio data size: ${audioData.byteLength} bytes`);
 
       // Convert ArrayBuffer to File object for the transcriber
       const blob = new Blob([audioData], { type: `audio/${audioFile.extension.replace(".", "")}` });
       const file = new File([blob], audioFile.filename, { type: blob.type });
+      
+      console.debug(`[LocalWhisperTranscriber] Created audio file: ${file.name}, size: ${file.size}, type: ${file.type}`);
 
       // Transcribe using the FileTranscriber
-      // Use single thread to avoid worker issues in Electron/Obsidian
+      // Note: Setting threads: 1 may not prevent worker creation during module init
+      console.debug(`[LocalWhisperTranscriber] Calling transcriber.transcribe() with threads: 1`);
       const result = await this.transcriber.transcribe(file, {
         threads: 1,
       });
+      
+      console.debug(`[LocalWhisperTranscriber] Transcribe call completed successfully`);
 
       console.debug(`[LocalWhisperTranscriber] Transcription complete`);
       console.debug(`[LocalWhisperTranscriber] Language: ${result.result.language}`);
