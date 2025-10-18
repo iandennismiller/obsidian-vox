@@ -165,21 +165,12 @@ export class TranscriptionProcessor {
 
         this.logger.log(notice);
         new Notice(notice);
+      } else {
+        // No valid transcription data - treat as error
+        throw new Error("No valid transcription data received");
       }
     } catch (error: unknown) {
-      this.setCanditateStatus(audioFile, VoxStatusItemStatus.FAILED);
-
-      console.warn(error);
-
-      if (isAxiosError(error)) {
-        if (error.response?.status === HttpStatusCode.TooManyRequests) {
-          new Notice("You've reached your transcription limit for today.");
-        } else {
-          new Notice("Error connecting to transcription host. Please check your settings.");
-        }
-      }
-
-      this.queue.pause();
+      this.handleTranscriptionError(audioFile, error);
     }
   }
 
@@ -196,48 +187,98 @@ export class TranscriptionProcessor {
       type: mimetype,
     });
 
-    try {
-      const formData = {
-        file: audioBlobFile,
-        temperature: this.settings.temperature ?? "0.0",
-        temperature_inc: this.settings.temperatureInc ?? "0.2",
-        response_format: "json",
-      };
+    const formData = {
+      file: audioBlobFile,
+      temperature: this.settings.temperature ?? "0.0",
+      temperature_inc: this.settings.temperatureInc ?? "0.2",
+      response_format: "json",
+    };
 
-      const headers: Record<string, string> = {
-        "Content-Type": "multipart/form-data",
-      };
+    const headers: Record<string, string> = {
+      "Content-Type": "multipart/form-data",
+    };
 
-      // Only add API keys if using the public endpoint
-      if (!this.settings.isSelfHosted) {
-        headers[OBSIDIAN_VAULT_ID_HEADER_KEY] = this.app.appId;
-        headers[OBSIDIAN_API_KEY_HEADER_KEY] = this.settings.apiKey;
-      }
-
-      const response = await axios.postForm<TranscriptionResponse>(url, formData, {
-        headers,
-        timeout: 20 * ONE_MINUTE_IN_MS,
-        responseType: "json",
-      });
-
-      if (!response.data || response.status !== 200) {
-        console.warn("Could not transcribe audio:", response);
-
-        new Notice(`There was an issue transcribing audio: "${audioFile.filename}"`);
-      }
-
-      return response.data;
-    } catch (error: unknown) {
-      if (isAxiosError(error)) {
-        console.warn(error);
-        new Notice("Error connecting to transcription host. Please check your settings.");
-      } else {
-        new Notice("There was an issue transcribing file.");
-      }
-
-      this.queue.pause();
-      return null;
+    // Only add API keys if using the public endpoint
+    if (!this.settings.isSelfHosted) {
+      headers[OBSIDIAN_VAULT_ID_HEADER_KEY] = this.app.appId;
+      headers[OBSIDIAN_API_KEY_HEADER_KEY] = this.settings.apiKey;
     }
+
+    const response = await axios.postForm<TranscriptionResponse>(url, formData, {
+      headers,
+      timeout: 20 * ONE_MINUTE_IN_MS,
+      responseType: "json",
+    });
+
+    if (!response.data || response.status !== 200) {
+      console.warn("Could not transcribe audio:", response);
+      throw new Error(`Invalid response status: ${response.status}`);
+    }
+
+    return response.data;
+  }
+
+  /**
+   * Handle transcription errors with retry logic and geometric backoff.
+   */
+  private handleTranscriptionError(audioFile: TranscriptionCandidate, error: unknown) {
+    const statusItem = this.state.items[audioFile.hash];
+    const retryCount = statusItem?.retryCount ?? 0;
+
+    this.incrementRetryCount(audioFile);
+
+    console.warn(`Transcription error (attempt ${retryCount + 1}/${this.settings.maxRetries}):`, error);
+
+    if (isAxiosError(error)) {
+      if (error.response?.status === HttpStatusCode.TooManyRequests) {
+        new Notice("You've reached your transcription limit for today.");
+        this.setCanditateStatus(audioFile, VoxStatusItemStatus.FAILED);
+        this.queue.pause();
+        return;
+      } else {
+        new Notice("Error connecting to transcription host. Please check your settings.");
+      }
+    }
+
+    // Check if we've exceeded max retries
+    if (retryCount >= this.settings.maxRetries) {
+      this.setCanditateStatus(audioFile, VoxStatusItemStatus.FAILED);
+      new Notice(`Failed to transcribe "${audioFile.filename}" after ${this.settings.maxRetries} attempts.`);
+      // Don't pause the queue - let it continue with other files
+      return;
+    }
+
+    // Calculate backoff delay using geometric progression: base * 2^retry_count
+    const delay = this.calculateBackoffDelay(retryCount);
+    
+    this.logger.log(`Will retry "${audioFile.filename}" in ${Math.round(delay / 1000)} seconds...`);
+    
+    // Set status back to QUEUED to indicate it will be retried
+    this.setCanditateStatus(audioFile, VoxStatusItemStatus.QUEUED);
+
+    // Schedule retry after backoff delay
+    setTimeout(() => {
+      this.queue.add(() => this.processFile(audioFile));
+    }, delay);
+  }
+
+  /**
+   * Calculate geometric backoff delay: min(base * 2^retry_count, max_delay)
+   */
+  private calculateBackoffDelay(retryCount: number): number {
+    const geometricDelay = this.settings.retryBaseDelayMs * Math.pow(2, retryCount);
+    return Math.min(geometricDelay, this.settings.retryMaxDelayMs);
+  }
+
+  /**
+   * Increment the retry count for a file.
+   */
+  private incrementRetryCount(candidate: TranscriptionCandidate) {
+    if (this.state.items[candidate.hash]) {
+      this.state.items[candidate.hash].retryCount += 1;
+      this.state.items[candidate.hash].lastRetryAt = new Date();
+    }
+    this.notifySubscribers();
   }
 
   /**
@@ -317,13 +358,24 @@ export class TranscriptionProcessor {
       if (validUnprocessedCandidates.length < FILE_CHUNK_LIMIT) {
         const candidate = await this.getTranscribedStatus(filepath, transcribedFiles);
 
-        if (!candidate.isTranscribed) {
+        if (!candidate.isTranscribed && !this.hasExceededMaxRetries(candidate)) {
           validUnprocessedCandidates.push(candidate);
         }
       }
     }
 
     return validUnprocessedCandidates;
+  }
+
+  /**
+   * Check if a candidate has exceeded the maximum number of retries.
+   */
+  private hasExceededMaxRetries(candidate: TranscriptionCandidate): boolean {
+    const statusItem = this.state.items[candidate.hash];
+    if (!statusItem) {
+      return false;
+    }
+    return statusItem.retryCount >= this.settings.maxRetries && statusItem.status === VoxStatusItemStatus.FAILED;
   }
 
   public async getTranscribedFiles() {
@@ -398,6 +450,8 @@ export class TranscriptionProcessor {
         addedAt: new Date(),
         finalizedAt,
         status,
+        retryCount: 0,
+        lastRetryAt: null,
       };
     }
 

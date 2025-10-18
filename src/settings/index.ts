@@ -40,6 +40,11 @@ export interface Settings {
   // Whisper.cpp specific settings
   temperature: string;
   temperatureInc: string;
+
+  // Retry settings
+  maxRetries: number;
+  retryBaseDelayMs: number;
+  retryMaxDelayMs: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -74,6 +79,11 @@ export const DEFAULT_SETTINGS: Settings = {
   // Whisper.cpp defaults
   temperature: "0.0",
   temperatureInc: "0.2",
+
+  // Retry defaults
+  maxRetries: 3,
+  retryBaseDelayMs: 5000, // 5 seconds
+  retryMaxDelayMs: 300000, // 5 minutes
 };
 
 export class VoxSettingTab extends PluginSettingTab {
@@ -576,6 +586,60 @@ export class VoxSettingTab extends PluginSettingTab {
         cb.setValue(this.plugin.settings.temperatureInc);
         cb.onChange((value) => {
           this.plugin.settings.temperatureInc = value;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Maximum Retry Attempts")
+      .setDesc("Number of times to retry a failed transcription before giving up.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "0",
+          max: "10",
+          step: "1",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.maxRetries));
+        cb.onChange((value) => {
+          this.plugin.settings.maxRetries = parseInt(value) || 3;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Retry Base Delay (ms)")
+      .setDesc("Initial delay before first retry. Each retry doubles this delay (geometric backoff).")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "1000",
+          max: "60000",
+          step: "1000",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.retryBaseDelayMs));
+        cb.onChange((value) => {
+          this.plugin.settings.retryBaseDelayMs = parseInt(value) || 5000;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Retry Maximum Delay (ms)")
+      .setDesc("Maximum delay between retries. Caps the geometric backoff.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "10000",
+          max: "600000",
+          step: "10000",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.retryMaxDelayMs));
+        cb.onChange((value) => {
+          this.plugin.settings.retryMaxDelayMs = parseInt(value) || 300000;
           this.plugin.saveSettings();
         });
       });
