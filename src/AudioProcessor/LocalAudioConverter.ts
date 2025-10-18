@@ -14,10 +14,10 @@ export class LocalAudioConverter {
 
   /**
    * Convert an audio file to WAV format required by whisper.cpp server.
-   * Supports MP3, OGG, FLAC, and WAV (pass-through) formats.
+   * Supports MP3, OGG, FLAC, M4A, AAC, and WAV (pass-through) formats.
    *
    * @param audioBinary - The input audio file as an ArrayBuffer
-   * @param extension - The file extension (e.g., ".mp3", ".ogg")
+   * @param extension - The file extension (e.g., ".mp3", ".ogg", ".m4a")
    * @returns ArrayBuffer containing the WAV file data
    */
   async convertToWav(audioBinary: ArrayBuffer, extension: string): Promise<ArrayBuffer> {
@@ -50,12 +50,10 @@ export class LocalAudioConverter {
           break;
         case "m4a":
         case "aac":
-          // For M4A/AAC, we'll need to handle these differently
-          // For now, throw an error to indicate unsupported format
-          throw new Error(
-            `${normalizedExt.toUpperCase()} format is not yet supported for local conversion. ` +
-              "Please convert to MP3, OGG, FLAC, or WAV format first.",
-          );
+        case "mp4":
+          // Use Web Audio API for M4A/AAC decoding (native browser support)
+          audioData = await this.decodeWithWebAudio(audioBinary);
+          break;
         default:
           throw new Error(`Unsupported audio format: ${normalizedExt}`);
       }
@@ -143,6 +141,41 @@ export class LocalAudioConverter {
       sampleRate: result.sampleRate,
       channelData: result.channelData,
     };
+  }
+
+  /**
+   * Decode M4A/AAC audio using Web Audio API (native browser support)
+   * This leverages the browser's built-in audio codecs, avoiding the need for additional WASM libraries.
+   */
+  private async decodeWithWebAudio(audioBinary: ArrayBuffer): Promise<AudioData> {
+    // Create an offline audio context for decoding
+    // We use a dummy sample rate as it will be overridden by the actual audio data
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+    try {
+      // Decode the audio data using the browser's native decoder
+      const audioBuffer = await audioContext.decodeAudioData(audioBinary.slice(0));
+
+      // Extract channel data
+      const channelData: Float32Array[] = [];
+      for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+        channelData.push(audioBuffer.getChannelData(i));
+      }
+
+      // Close the audio context to free resources
+      await audioContext.close();
+
+      return {
+        sampleRate: audioBuffer.sampleRate,
+        channelData: channelData,
+      };
+    } catch (error) {
+      // Close the audio context even on error
+      await audioContext.close();
+      throw new Error(
+        `Failed to decode audio with Web Audio API: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /**

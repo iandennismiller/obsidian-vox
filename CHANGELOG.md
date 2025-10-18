@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file. See [standa
   - Added support for MP3/MP2/MP1 decoding via `mpg123-decoder`
   - Added support for OGG Vorbis decoding via `@wasm-audio-decoders/ogg-vorbis`
   - Added support for FLAC decoding via `@wasm-audio-decoders/flac`
+  - **Added support for M4A/AAC decoding via Web Audio API** (native browser support)
   - Audio files are automatically converted to WAV format for whisper.cpp transcription
   - No server-side conversion needed - all processing happens on your device
   - Improved privacy: audio files never leave your device during conversion
@@ -20,6 +21,7 @@ All notable changes to this project will be documented in this file. See [standa
 
 ### Technical Details
 - New `LocalAudioConverter` class handles all audio format conversion
+- M4A/AAC support uses Web Audio API's `decodeAudioData` for native decoding
 - Proper memory management with `decoder.free()` after each conversion
 - Enhanced logging with file size information and conversion details
 - Comprehensive unit tests for audio conversion logic

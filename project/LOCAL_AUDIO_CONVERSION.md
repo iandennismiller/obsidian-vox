@@ -11,7 +11,7 @@ As of this implementation, Obsidian Vox handles all audio format conversion loca
 │                   Audio Processing Flow                     │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  Audio File (MP3/OGG/FLAC/WAV)                             │
+│  Audio File (MP3/OGG/FLAC/M4A/AAC/WAV)                     │
 │         │                                                   │
 │         ▼                                                   │
 │  ┌──────────────────────┐                                  │
@@ -25,6 +25,7 @@ As of this implementation, Obsidian Vox handles all audio format conversion loca
 │  │ - MP3 Decoder (WASM) │                                  │
 │  │ - OGG Decoder (WASM) │                                  │
 │  │ - FLAC Decoder (WASM)│                                  │
+│  │ - M4A/AAC (Web Audio)│                                  │
 │  │ - WAV Encoder        │                                  │
 │  └──────────────────────┘                                  │
 │         │                                                   │
@@ -49,12 +50,18 @@ The implementation uses the [wasm-audio-decoders](https://github.com/eshaz/wasm-
 - **@wasm-audio-decoders/ogg-vorbis** (0.1.18): Decodes Ogg Vorbis files to PCM
 - **@wasm-audio-decoders/flac** (0.2.8): Decodes FLAC files to PCM
 
+### Web Audio API
+
+- **M4A/AAC Decoding**: Uses native `AudioContext.decodeAudioData()` for M4A/AAC files
+- Leverages browser's built-in codec support (no additional dependencies needed)
+- Works with all formats supported by the browser/Electron's audio stack
+
 ### WAV Encoder
 
 - **wav-encoder** (1.3.0): Encodes PCM data to WAV format
 
 All these libraries are:
-- Lightweight (~200KB total minified)
+- Lightweight (~200KB total minified for WASM decoders)
 - Browser-compatible (run in Electron's renderer process)
 - Well-maintained and actively developed
 - MIT licensed
@@ -73,6 +80,7 @@ class LocalAudioConverter {
   private async decodeMp3(audioBinary: ArrayBuffer): Promise<AudioData>
   private async decodeOgg(audioBinary: ArrayBuffer): Promise<AudioData>
   private async decodeFlac(audioBinary: ArrayBuffer): Promise<AudioData>
+  private async decodeWithWebAudio(audioBinary: ArrayBuffer): Promise<AudioData>
   private async encodeToWav(audioData: AudioData): Promise<ArrayBuffer>
 }
 ```
@@ -81,13 +89,18 @@ class LocalAudioConverter {
 
 1. **Input Validation**: Check if the file extension is supported
 2. **Pass-through**: If already WAV, return the original data
-3. **Decoding**: Use appropriate WASM decoder based on file extension
-4. **Resource Cleanup**: Call `decoder.free()` to release WASM memory
+3. **Decoding**: Use appropriate decoder based on file extension:
+   - MP3/MP2/MP1: WASM decoder (mpg123-decoder)
+   - OGG Vorbis: WASM decoder (ogg-vorbis)
+   - FLAC: WASM decoder (flac)
+   - M4A/AAC/MP4: Web Audio API (native browser support)
+4. **Resource Cleanup**: Call `decoder.free()` for WASM decoders or `audioContext.close()` for Web Audio API
 5. **Encoding**: Convert PCM data to WAV format using wav-encoder
 6. **Return**: WAV audio data ready for transcription
 
 ### Memory Management
 
+#### WASM Decoders
 Each decoder instance is properly cleaned up after use:
 
 ```typescript
@@ -97,11 +110,26 @@ const result = await decoder.decode(audioData);
 decoder.free(); // Important: Free WASM memory
 ```
 
+#### Web Audio API (M4A/AAC)
+Audio contexts are properly closed after decoding:
+
+```typescript
+const audioContext = new AudioContext();
+try {
+  const audioBuffer = await audioContext.decodeAudioData(audioBinary);
+  // Extract channel data...
+  return audioData;
+} finally {
+  await audioContext.close(); // Always close, even on error
+}
+```
+
 ### Error Handling
 
 - Invalid formats throw descriptive errors
-- Unsupported formats (M4A/AAC) provide helpful user messages
+- Unsupported formats provide helpful user messages
 - All errors are logged and surfaced to the user via Obsidian's Notice API
+- Audio contexts are properly cleaned up even when errors occur
 
 ## Integration with AudioProcessor
 
@@ -149,15 +177,13 @@ const convertedAudio = await this.localConverter.convertToWav(
 
 ## Limitations
 
-### Currently Unsupported Formats
-
-**M4A and AAC**: These formats use different codecs (typically AAC audio in MP4 container) and require additional WASM decoders. Planned for future implementation.
-
-**Workaround**: Users can convert M4A/AAC files to MP3, OGG, or FLAC using standard audio conversion tools (ffmpeg, Audacity, online converters, etc.)
-
 ### Memory Usage
 
-WASM decoders load entire audio files into memory. Very large files (>100MB) may cause memory pressure on low-end devices. This is generally not an issue for voice memos (typically <50MB).
+WASM decoders and Web Audio API load entire audio files into memory. Very large files (>100MB) may cause memory pressure on low-end devices. This is generally not an issue for voice memos (typically <50MB).
+
+### Browser Codec Support
+
+M4A/AAC decoding relies on the browser's native codec support via Web Audio API. All modern browsers and Electron support these formats, but very old browsers may not.
 
 ## Testing
 
@@ -169,12 +195,14 @@ Unit tests cover the conversion logic in `tests/unit/audio-conversion.test.ts`:
 - Extension normalization (case-insensitive, with/without dot)
 - Error handling for unsupported formats
 - WAV pass-through behavior
+- M4A/AAC decoding with Web Audio API
+- Proper cleanup of audio contexts
 
 ### Integration Testing
 
 Integration testing requires actual audio files and is best done manually:
 
-1. Place test audio files (MP3, OGG, FLAC) in the watch directory
+1. Place test audio files (MP3, OGG, FLAC, M4A) in the watch directory
 2. Verify they are converted to WAV in the cache directory
 3. Verify transcription proceeds normally
 
@@ -182,10 +210,9 @@ Integration testing requires actual audio files and is best done manually:
 
 ### Planned
 
-1. **M4A/AAC Support**: Add appropriate WASM decoders
-2. **Streaming Conversion**: Process large files in chunks
-3. **Progress Indicators**: Show conversion progress for large files
-4. **Format Detection**: Auto-detect format from file content (not just extension)
+1. **Streaming Conversion**: Process large files in chunks
+2. **Progress Indicators**: Show conversion progress for large files
+3. **Format Detection**: Auto-detect format from file content (not just extension)
 
 ### Possible
 

@@ -23,8 +23,8 @@ VOX now handles **all audio conversion locally** using WebAssembly decoders, ens
 - ✅ **MP3** - Full support (MP1, MP2, MP3)
 - ✅ **OGG** - Ogg Vorbis format
 - ✅ **FLAC** - Free Lossless Audio Codec
+- ✅ **M4A/AAC** - Full support via Web Audio API
 - ✅ **WAV** - Pass-through (no conversion needed)
-- ⚠️ **M4A/AAC** - Not yet supported (coming soon)
 
 ### Benefits of Local Conversion
 
@@ -33,7 +33,7 @@ VOX now handles **all audio conversion locally** using WebAssembly decoders, ens
 - 💾 **Offline**: No internet required for audio format conversion
 - 🎯 **Automatic**: Seamless conversion to whisper.cpp's required WAV format
 
-If you have M4A or AAC files, please convert them to MP3, OGG, or FLAC format first using your preferred audio converter.
+All major audio formats are now supported for local transcoding!
 
 #### Status View
 
