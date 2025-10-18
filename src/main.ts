@@ -1,7 +1,8 @@
 import AudioRecorder from "AudioRecorder";
-import { Plugin, TAbstractFile, WorkspaceLeaf, debounce } from "obsidian";
+import { Plugin, TAbstractFile, WorkspaceLeaf, debounce, Notice } from "obsidian";
 import { DEFAULT_SETTINGS, Settings, VoxSettingTab } from "settings";
 import { Logger } from "utils/log";
+import { waitForFileStability } from "utils/fileStability";
 import { VOX_RECORDER_VIEW, VoxRecorderViewRenderer } from "view/VoxRecorderViewRenderer";
 import { VOX_STATUS_VIEW, VoxStatusViewRenderer } from "view/VoxStatusViewRenderer";
 import { TranscriptionProcessor } from "./TranscriptionProcessor";
@@ -36,11 +37,24 @@ export default class VoxPlugin extends Plugin {
       // Then watch for any changes...
       const queueFromWatcher = async (file: TAbstractFile) => {
         if (file.path.includes(this.settings.watchDirectory)) {
-          const transcribedFilesInfo = await this.processor.getTranscribedFiles();
-          const candidate = await this.processor.getTranscribedStatus(file.path, transcribedFilesInfo);
+          try {
+            // Wait for the file to be stable (non-zero size and not growing)
+            await waitForFileStability(
+              file.path,
+              this.app.vault.adapter,
+              this.settings.fileStabilityDelayMs,
+              this.settings.fileStabilityCheckIntervalMs
+            );
 
-          if (!candidate.isTranscribed) {
-            this.processor.queueFile(candidate);
+            const transcribedFilesInfo = await this.processor.getTranscribedFiles();
+            const candidate = await this.processor.getTranscribedStatus(file.path, transcribedFilesInfo);
+
+            if (!candidate.isTranscribed) {
+              this.processor.queueFile(candidate);
+            }
+          } catch (error) {
+            console.warn(`[VOX] File stability check failed for ${file.path}:`, error);
+            // Don't queue the file if stability check failed
           }
         }
       };
