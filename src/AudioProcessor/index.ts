@@ -30,6 +30,10 @@ export class AudioProcessor {
    * @note
    * We hash the incoming audio file to keep track of where it has been transcribed;
    * ensuring that with filename changes, we can still determine its status.
+   * 
+   * @note
+   * M4A files are always converted to MP3 first to ensure compatibility with whisper.cpp,
+   * then converted to the final output format if different from MP3.
    */
   public async transformAudio(audioFile: FileDetail): Promise<FileDetail> {
     // Is this actually an audio file?
@@ -45,20 +49,58 @@ export class AudioProcessor {
     const outputFilename = `${outputName}${desiredExtension}`;
     const outputCachedFileDetail = extractFileDetail(path.join(CACHE_DIRECTORY, outputFilename));
 
-    const audioBinary = await this.vault.adapter.readBinary(audioFile.filepath);
+    let audioBinary = await this.vault.adapter.readBinary(audioFile.filepath);
+    let currentExtension = audioFile.extension;
 
-    // Convert the file to the correct file extension.
-    const shouldConvertFile = audioFile.extension !== desiredExtension;
+    // M4A files must be converted to MP3 first for whisper.cpp compatibility
+    if (audioFile.extension === ".m4a") {
+      this.logger.log(`Converting M4A file to MP3: "${audioFile.filename}"`);
+      
+      const host = this.settings.isSelfHosted ? this.settings.selfHostedEndpoint : PUBLIC_API_ENDPOINT;
+      const url = `${host}/convert/audio`;
+
+      const audioBlob = new Blob([audioBinary], { type: "audio/m4a" });
+      const audioBlobFile = new File([audioBlob], audioFile.filename, {
+        type: "audio/m4a",
+      });
+
+      const response = await axios.postForm<Buffer>(
+        url,
+        {
+          format: "mp3",
+          audio_file: audioBlobFile,
+        },
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            [OBSIDIAN_VAULT_ID_HEADER_KEY]: this.appId,
+            [OBSIDIAN_API_KEY_HEADER_KEY]: this.settings.apiKey,
+          },
+          responseType: "arraybuffer",
+        }
+      );
+
+      if (!response.data || response.status !== 200) {
+        const error = "There was an error converting M4A to MP3. Please ensure your transcription service supports audio conversion.";
+        new Notice(error);
+        throw new Error(error);
+      }
+
+      audioBinary = response.data;
+      currentExtension = ".mp3";
+    }
+
+    // Convert the file to the final output extension if needed
+    const shouldConvertFile = currentExtension !== desiredExtension;
 
     if (shouldConvertFile) {
-      this.logger.log(`Converting audio file: "${audioFile.filename}"`);
+      this.logger.log(`Converting audio file to ${desiredExtension}: "${audioFile.filename}"`);
 
       const host = this.settings.isSelfHosted ? this.settings.selfHostedEndpoint : PUBLIC_API_ENDPOINT;
-
       const url = `${host}/convert/audio`;
       const mimetype = `audio/${this.settings.audioOutputExtension}`;
 
-      const audioBlob = new Blob([audioBinary], { type: mimetype });
+      const audioBlob = new Blob([audioBinary], { type: `audio/${currentExtension.replace(".", "")}` });
       const audioBlobFile = new File([audioBlob], audioFile.filename, {
         type: mimetype,
       });
@@ -89,11 +131,8 @@ export class AudioProcessor {
       await this.vault.adapter.mkdir(outputCachedFileDetail.directory);
       await this.vault.adapter.writeBinary(outputCachedFileDetail.filepath, response.data);
     } else {
-      const exists = await this.vault.exists(outputCachedFileDetail.filepath);
-
-      if (!exists) {
-        await this.vault.adapter.copy(audioFile.filepath, outputCachedFileDetail.filepath);
-      }
+      await this.vault.adapter.mkdir(outputCachedFileDetail.directory);
+      await this.vault.adapter.writeBinary(outputCachedFileDetail.filepath, audioBinary);
     }
 
     return outputCachedFileDetail;
