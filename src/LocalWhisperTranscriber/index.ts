@@ -67,43 +67,33 @@ export class LocalWhisperTranscriber {
       // This handles worker file location in Obsidian's bundled environment
       const customCreateModule = async (moduleArg: any = {}) => {
         console.debug("[LocalWhisperTranscriber] Creating WASM module with custom config");
+        console.debug(`[LocalWhisperTranscriber] window.location.href: ${typeof window !== 'undefined' ? window.location.href : 'N/A'}`);
         
-        // Provide locateFile to help Emscripten find worker files
-        // In Obsidian/Electron, worker files are bundled in the plugin directory
+        // The key to making workers work in Obsidian is to provide pthreadMainJs
+        // This tells Emscripten where to find the worker file
+        // In Obsidian, plugins are loaded from app://local/<vault>/.obsidian/plugins/<plugin-name>/
+        
+        // Construct the worker URL relative to the plugin directory
+        if (typeof window !== 'undefined' && window.location) {
+          // Get the base URL for the plugin (where main.js is located)
+          const baseUrl = new URL('./', window.location.href);
+          // The worker file is in the same directory as main.js
+          const workerUrl = new URL('shout.wasm.worker.mjs', baseUrl).href;
+          
+          console.debug(`[LocalWhisperTranscriber] Setting pthreadMainJs to: ${workerUrl}`);
+          moduleArg.pthreadMainJs = workerUrl;
+        }
+        
+        // Provide locateFile to help Emscripten find other files if needed
         moduleArg.locateFile = (path: string, scriptDirectory: string) => {
           console.debug(`[LocalWhisperTranscriber] locateFile called:`);
           console.debug(`  - path: "${path}"`);
           console.debug(`  - scriptDirectory: "${scriptDirectory}"`);
-          console.debug(`  - window.location.href: "${typeof window !== 'undefined' ? window.location.href : 'N/A'}"`);
           
-          // For worker files, we need to provide the correct path
-          // In Obsidian, the worker file should be in the plugin directory next to main.js
-          if (path.includes('worker')) {
-            // The worker file is copied to the plugin root by esbuild
-            // We need to construct a proper path/URL for it
-            
-            // Try different approaches based on environment
-            if (typeof window !== 'undefined' && window.location) {
-              // In browser/Electron context, try to use a relative URL
-              const baseUrl = new URL('./', window.location.href);
-              const workerUrl = new URL(path, baseUrl).href;
-              console.debug(`  - Resolved worker URL: "${workerUrl}"`);
-              return workerUrl;
-            }
-          }
-          
-          // For other files, use default behavior
           const resolvedPath = scriptDirectory + path;
           console.debug(`  - Resolved path: "${resolvedPath}"`);
           return resolvedPath;
         };
-        
-        // Override mainScriptUrlOrBlob to help with worker loading
-        if (typeof document !== 'undefined' && document.currentScript) {
-          const scriptUrl = (document.currentScript as HTMLScriptElement).src;
-          console.debug(`[LocalWhisperTranscriber] Main script URL: ${scriptUrl}`);
-          moduleArg.mainScriptUrlOrBlob = scriptUrl;
-        }
         
         console.debug("[LocalWhisperTranscriber] Calling original createModule");
         const module = await createModule(moduleArg);
