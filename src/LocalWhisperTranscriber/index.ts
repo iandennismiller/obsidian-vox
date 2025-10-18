@@ -1,5 +1,6 @@
 import createModule from "@transcribe/shout";
 import { FileTranscriber } from "@transcribe/transcriber";
+import { readFile } from "fs/promises";
 import { Notice } from "obsidian";
 import { FileDetail, TranscriptionResponse } from "types";
 import { Logger } from "utils/log";
@@ -40,26 +41,26 @@ export class LocalWhisperTranscriber {
     try {
       this.logger.log("Initializing local whisper.cpp transcriber...");
 
-      // Check if model file is accessible
-      // In Obsidian/Electron, we need to handle file paths carefully
+      // Load model file from filesystem using Node.js fs module
+      // This works for files outside the vault in Obsidian/Electron
       let modelData: File | string = this.modelPath;
 
-      // Try to fetch the model if it's a file:// URL or absolute path
-      if (this.modelPath.startsWith("file://") || this.modelPath.startsWith("/")) {
-        try {
-          // For electron, we can use fetch with file:// protocol
-          const modelUrl = this.modelPath.startsWith("file://") ? this.modelPath : `file://${this.modelPath}`;
-          const response = await fetch(modelUrl);
-          if (!response.ok) {
-            throw new Error(`Failed to load model: ${response.statusText}`);
-          }
-          const blob = await response.blob();
-          modelData = new File([blob], "model.bin", { type: "application/octet-stream" });
-        } catch (error) {
-          console.warn("Could not fetch model file, will try using path directly:", error);
-          // Fall back to using the path directly
-          modelData = this.modelPath;
-        }
+      // Read the model file from the filesystem
+      try {
+        console.debug(`[LocalWhisperTranscriber] Loading model from: ${this.modelPath}`);
+        
+        // Use Node.js fs to read the file (works in Electron/Obsidian)
+        const buffer = await readFile(this.modelPath);
+        
+        // Convert Node.js Buffer to Blob and then to File
+        const blob = new Blob([buffer], { type: "application/octet-stream" });
+        modelData = new File([blob], "model.bin", { type: "application/octet-stream" });
+        
+        console.debug(`[LocalWhisperTranscriber] Model file loaded successfully, size: ${buffer.length} bytes`);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        console.error(`[LocalWhisperTranscriber] Failed to read model file:`, error);
+        throw new Error(`Failed to read model file from ${this.modelPath}: ${errorMsg}`);
       }
 
       this.transcriber = new FileTranscriber({
