@@ -128,13 +128,15 @@ describe("Transcription Response Validation", () => {
       expect(response.text).toBeUndefined();
     });
 
-    it("should detect missing segments field", () => {
+    it("should allow missing segments field (will be created from text)", () => {
       const response = {
         text: "Test transcription",
         language: "english",
       };
 
+      // segments can be missing and will be auto-created from text
       expect(response.segments).toBeUndefined();
+      expect(response.text).toBeDefined();
     });
 
     it("should detect empty segments array", () => {
@@ -162,9 +164,9 @@ describe("Transcription Response Validation", () => {
     const isValidResponse = (data: any): boolean => {
       if (!data) return false;
       if (!data.text) return false;
-      if (!data.segments) return false;
-      if (!Array.isArray(data.segments)) return false;
-      if (data.segments.length === 0) return false;
+      // segments are optional - they will be created from text if missing
+      if (data.segments && !Array.isArray(data.segments)) return false;
+      if (data.segments && data.segments.length === 0) return false;
       return true;
     };
 
@@ -189,19 +191,19 @@ describe("Transcription Response Validation", () => {
       expect(isValidResponse(response)).toBe(true);
     });
 
+    it("should validate response with text only (segments will be auto-created)", () => {
+      const response = {
+        text: "Test",
+        language: "english",
+      };
+
+      expect(isValidResponse(response)).toBe(true);
+    });
+
     it("should reject response with missing text", () => {
       const response = {
         language: "english",
         segments: [{ id: 0, text: "Test" }],
-      };
-
-      expect(isValidResponse(response)).toBe(false);
-    });
-
-    it("should reject response with missing segments", () => {
-      const response = {
-        text: "Test",
-        language: "english",
       };
 
       expect(isValidResponse(response)).toBe(false);
