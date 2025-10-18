@@ -47,7 +47,7 @@ export class LocalWhisperTranscriber {
 
       // Read the model file from the filesystem
       try {
-        console.debug(`[LocalWhisperTranscriber] Loading model from: ${this.modelPath}`);
+        console.log(`[LocalWhisperTranscriber] Loading model from: ${this.modelPath}`);
         
         // Use Node.js fs to read the file (works in Electron/Obsidian)
         const buffer = await readFile(this.modelPath);
@@ -56,7 +56,7 @@ export class LocalWhisperTranscriber {
         const blob = new Blob([buffer], { type: "application/octet-stream" });
         modelData = new File([blob], "model.bin", { type: "application/octet-stream" });
         
-        console.debug(`[LocalWhisperTranscriber] Model file loaded successfully, size: ${buffer.length} bytes`);
+        console.log(`[LocalWhisperTranscriber] Model file loaded successfully, size: ${buffer.length} bytes`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Unknown error";
         console.error(`[LocalWhisperTranscriber] Failed to read model file:`, error);
@@ -66,38 +66,70 @@ export class LocalWhisperTranscriber {
       // Create a custom module configuration for Emscripten
       // This handles worker file location in Obsidian's bundled environment
       const customCreateModule = async (moduleArg: any = {}) => {
-        console.debug("[LocalWhisperTranscriber] Creating WASM module with custom config");
-        console.debug(`[LocalWhisperTranscriber] window.location.href: ${typeof window !== 'undefined' ? window.location.href : 'N/A'}`);
+        console.log("[LocalWhisperTranscriber] ===== Creating WASM module with custom config =====");
         
-        // The key to making workers work in Obsidian is to provide pthreadMainJs
-        // This tells Emscripten where to find the worker file
-        // In Obsidian, plugins are loaded from app://local/<vault>/.obsidian/plugins/<plugin-name>/
+        // In Obsidian, plugins are loaded from app://local/<vault-id>/.obsidian/plugins/<plugin-name>/
+        // We need to find our plugin's base URL to locate the worker file
         
-        // Construct the worker URL relative to the plugin directory
-        if (typeof window !== 'undefined' && window.location) {
-          // Get the base URL for the plugin (where main.js is located)
-          const baseUrl = new URL('./', window.location.href);
-          // The worker file is in the same directory as main.js
-          const workerUrl = new URL('shout.wasm.worker.mjs', baseUrl).href;
-          
-          console.debug(`[LocalWhisperTranscriber] Setting pthreadMainJs to: ${workerUrl}`);
-          moduleArg.pthreadMainJs = workerUrl;
+        let pluginBaseUrl: string | null = null;
+        
+        // Try to find our script's URL by looking for script tags
+        if (typeof document !== 'undefined') {
+          const scripts = document.getElementsByTagName('script');
+          for (let i = 0; i < scripts.length; i++) {
+            const src = scripts[i].src;
+            // Look for a script that contains 'plugins/vox' or 'plugins' with '.obsidian'
+            if (src && (src.includes('/plugins/vox/') || (src.includes('.obsidian') && src.includes('/plugins/')))) {
+              console.log(`[LocalWhisperTranscriber] Found potential plugin script: ${src}`);
+              // Extract the base URL (everything up to and including the plugin directory)
+              const match = src.match(/(.*\/plugins\/[^/]+\/)/);
+              if (match) {
+                pluginBaseUrl = match[1];
+                console.log(`[LocalWhisperTranscriber] Extracted plugin base URL: ${pluginBaseUrl}`);
+                break;
+              }
+            }
+          }
+        }
+        
+        // Fallback: try to construct URL from window.location if we couldn't find it
+        if (!pluginBaseUrl && typeof window !== 'undefined' && window.location) {
+          // This is a fallback but likely won't work correctly - log it for debugging
+          console.warn("[LocalWhisperTranscriber] Could not find plugin script URL, using window.location fallback");
+          console.log(`[LocalWhisperTranscriber] window.location.href: ${window.location.href}`);
+          pluginBaseUrl = new URL('./', window.location.href).href;
+        }
+        
+        if (pluginBaseUrl) {
+          try {
+            // The worker file is in the same directory as main.js
+            const workerUrl = new URL('shout.wasm.worker.mjs', pluginBaseUrl).href;
+            
+            console.log(`[LocalWhisperTranscriber] *** SETTING pthreadMainJs to: ${workerUrl} ***`);
+            moduleArg.pthreadMainJs = workerUrl;
+            console.log(`[LocalWhisperTranscriber] Verification - moduleArg.pthreadMainJs = ${moduleArg.pthreadMainJs}`);
+          } catch (error) {
+            console.error(`[LocalWhisperTranscriber] Error constructing worker URL:`, error);
+          }
+        } else {
+          console.error("[LocalWhisperTranscriber] Cannot construct worker URL - could not determine plugin base URL");
         }
         
         // Provide locateFile to help Emscripten find other files if needed
         moduleArg.locateFile = (path: string, scriptDirectory: string) => {
-          console.debug(`[LocalWhisperTranscriber] locateFile called:`);
-          console.debug(`  - path: "${path}"`);
-          console.debug(`  - scriptDirectory: "${scriptDirectory}"`);
+          console.log(`[LocalWhisperTranscriber] locateFile called:`);
+          console.log(`  - path: "${path}"`);
+          console.log(`  - scriptDirectory: "${scriptDirectory}"`);
           
           const resolvedPath = scriptDirectory + path;
-          console.debug(`  - Resolved path: "${resolvedPath}"`);
+          console.log(`  - Resolved path: "${resolvedPath}"`);
           return resolvedPath;
         };
         
-        console.debug("[LocalWhisperTranscriber] Calling original createModule");
+        console.log("[LocalWhisperTranscriber] Calling original createModule with moduleArg:", Object.keys(moduleArg));
         const module = await createModule(moduleArg);
-        console.debug("[LocalWhisperTranscriber] createModule completed");
+        console.log("[LocalWhisperTranscriber] createModule completed");
+        console.log("[LocalWhisperTranscriber] module.pthreadMainJs:", module.pthreadMainJs);
         return module;
       };
 
@@ -141,27 +173,35 @@ export class LocalWhisperTranscriber {
     }
 
     try {
-      console.debug(`[LocalWhisperTranscriber] Starting transcription for: ${audioFile.filename}`);
-      console.debug(`[LocalWhisperTranscriber] Audio data size: ${audioData.byteLength} bytes`);
+      console.log(`[LocalWhisperTranscriber] ===== Starting transcription =====`);
+      console.log(`[LocalWhisperTranscriber] Audio file: ${audioFile.filename}`);
+      console.log(`[LocalWhisperTranscriber] Audio data size: ${audioData.byteLength} bytes`);
+      console.log(`[LocalWhisperTranscriber] Transcriber initialized: ${this.isInitialized}`);
+      
+      // Check if the module still has pthreadMainJs set
+      if (this.transcriber && (this.transcriber as any).Module) {
+        const module = (this.transcriber as any).Module;
+        console.log(`[LocalWhisperTranscriber] Module.pthreadMainJs: ${module.pthreadMainJs || 'NOT SET'}`);
+      }
 
       // Convert ArrayBuffer to File object for the transcriber
       const blob = new Blob([audioData], { type: `audio/${audioFile.extension.replace(".", "")}` });
       const file = new File([blob], audioFile.filename, { type: blob.type });
       
-      console.debug(`[LocalWhisperTranscriber] Created audio file: ${file.name}, size: ${file.size}, type: ${file.type}`);
+      console.log(`[LocalWhisperTranscriber] Created audio file: ${file.name}, size: ${file.size}, type: ${file.type}`);
 
       // Transcribe using the FileTranscriber
       // Note: Setting threads: 1 may not prevent worker creation during module init
-      console.debug(`[LocalWhisperTranscriber] Calling transcriber.transcribe() with threads: 1`);
+      console.log(`[LocalWhisperTranscriber] About to call transcriber.transcribe() with threads: 1`);
       const result = await this.transcriber.transcribe(file, {
         threads: 1,
       });
       
-      console.debug(`[LocalWhisperTranscriber] Transcribe call completed successfully`);
+      console.log(`[LocalWhisperTranscriber] Transcribe call completed successfully`);
 
-      console.debug(`[LocalWhisperTranscriber] Transcription complete`);
-      console.debug(`[LocalWhisperTranscriber] Language: ${result.result.language}`);
-      console.debug(`[LocalWhisperTranscriber] Segments: ${result.transcription.length}`);
+      console.log(`[LocalWhisperTranscriber] Transcription complete`);
+      console.log(`[LocalWhisperTranscriber] Language: ${result.result.language}`);
+      console.log(`[LocalWhisperTranscriber] Segments: ${result.transcription.length}`);
 
       // Convert the transcribe.js result format to our TranscriptionResponse format
       const transcriptionResponse: TranscriptionResponse = {
