@@ -14,7 +14,7 @@ The plugin previously relied on a server-side API endpoint (`/convert/audio`) fo
 - Bandwidth usage
 
 ## Solution
-Implement local audio transcoding using ffmpeg.wasm (https://github.com/ffmpegwasm/ffmpeg.wasm), a WebAssembly port of FFmpeg that runs entirely in the browser/Electron environment.
+Implement local audio transcoding using ffmpeg.wasm (https://github.com/ffmpegwasm/ffmpeg.wasm), a WebAssembly port of FFmpeg that runs entirely in the Electron environment.
 
 ## Technical Implementation
 
@@ -22,7 +22,7 @@ Implement local audio transcoding using ffmpeg.wasm (https://github.com/ffmpegwa
 A new utility class that wraps ffmpeg.wasm functionality:
 
 **Key Features:**
-- Lazy loading of ffmpeg.wasm core from CDN
+- Lazy loading of ffmpeg.wasm core from CDN (direct URL loading for Electron compatibility)
 - Support for multiple audio formats (MP3, WAV, M4A, AAC, OGG)
 - Optimized WAV conversion for whisper.cpp:
   - Sample rate: 16kHz
@@ -30,6 +30,10 @@ A new utility class that wraps ffmpeg.wasm functionality:
   - Encoding: 16-bit PCM
 - Automatic resource management (virtual filesystem cleanup)
 - Comprehensive error handling
+
+**Electron/Obsidian Compatibility:**
+- Uses direct CDN URLs instead of blob URLs for loading ffmpeg.wasm core
+- Compatible with Electron's security model and CORS restrictions
 
 **Public Methods:**
 - `load()`: Loads ffmpeg.wasm core
