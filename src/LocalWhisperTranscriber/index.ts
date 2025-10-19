@@ -63,45 +63,19 @@ export class LocalWhisperTranscriber {
         throw new Error(`Failed to read model file from ${this.modelPath}: ${errorMsg}`);
       }
 
-      // Create a custom module configuration for Emscripten
-      // This handles worker file location in Obsidian's bundled environment
+      // Use single-threaded mode to avoid worker creation issues in Obsidian/Electron
+      // Multi-threading in WASM with pthreads is problematic in bundled environments
+      // Single-threaded mode still provides good performance (2-4x real-time)
+      console.log("[LocalWhisperTranscriber] Using single-threaded WASM mode (no worker threads)");
+      
       const customCreateModule = async (moduleArg: any = {}) => {
-        console.log("[LocalWhisperTranscriber] ===== Creating WASM module with custom config =====");
+        // Disable pthread support to prevent worker creation
+        // This forces the WASM module to run entirely in the main thread
+        moduleArg.PTHREAD_POOL_SIZE = 0;
         
-        // Embed the worker code as a Blob URL to avoid file:// sandboxing issues
-        // The worker file is extremely small and can be embedded inline
-        const workerCode = `"use strict";var Module={};var initializedJS=false;function threadPrintErr(...args){var text=args.join(" ");console.error(text)}function threadAlert(...args){var text=args.join(" ");postMessage({cmd:"alert",text:text,threadId:Module["_pthread_self"]()})}var err=threadPrintErr;self.alert=threadAlert;Module["instantiateWasm"]=(info,receiveInstance)=>{var module=Module["wasmModule"];Module["wasmModule"]=null;var instance=new WebAssembly.Instance(module,info);return receiveInstance(instance)};self.onunhandledrejection=e=>{throw e.reason||e};function handleMessage(e){try{if(e.data.cmd==="load"){let messageQueue=[];self.onmessage=e=>messageQueue.push(e);self.startWorker=instance=>{Module=instance;postMessage({"cmd":"loaded"});for(let msg of messageQueue){handleMessage(msg)}self.onmessage=handleMessage};Module["wasmModule"]=e.data.wasmModule;for(const handler of e.data.handlers){Module[handler]=(...args)=>{postMessage({cmd:"callHandler",handler:handler,args:args})}}Module["wasmMemory"]=e.data.wasmMemory;Module["buffer"]=Module["wasmMemory"].buffer;Module["ENVIRONMENT_IS_PTHREAD"]=true;(e.data.urlOrBlob?import(e.data.urlOrBlob):import("./shout.wasm.js")).then(exports=>exports.default(Module))}else if(e.data.cmd==="run"){Module["__emscripten_thread_init"](e.data.pthread_ptr);Module["__emscripten_thread_mailbox_await"](e.data.pthread_ptr);Module["establishStackSpace"]();Module["PThread"].threadInitTLS();if(!initializedJS){Module["__embind_initialize_bindings"]();initializedJS=true}try{Module["invokeEntryPoint"](e.data.start_routine,e.data.arg)}catch(ex){if(ex!="unwind"){throw ex}}}else if(e.data.cmd==="cancel"){if(Module["_pthread_self"]()){Module["__emscripten_thread_exit"](e.data.exitCode)}}else if(e.data.target==="setimmediate"){}else if(e.data.cmd==="checkMailbox"){if(initializedJS){Module["checkMailbox"]()}}else if(e.data.cmd){err(\`worker.js received unknown command \${e.data.cmd}\`);err(e.data)}}catch(ex){Module["__emscripten_thread_crashed"]?.();throw ex}}self.onmessage=handleMessage;`;
-        
-        // Create a Blob URL from the worker code
-        const workerBlob = new Blob([workerCode], { type: "application/javascript" });
-        const workerUrl = URL.createObjectURL(workerBlob);
-        
-        console.log(`[LocalWhisperTranscriber] Created worker Blob URL: ${workerUrl}`);
-        console.log(`[LocalWhisperTranscriber] Worker code size: ${workerCode.length} bytes`);
-        
-        try {
-          console.log(`[LocalWhisperTranscriber] *** SETTING pthreadMainJs to Blob URL ***`);
-          moduleArg.pthreadMainJs = workerUrl;
-          console.log(`[LocalWhisperTranscriber] Verification - moduleArg.pthreadMainJs = ${moduleArg.pthreadMainJs}`);
-        } catch (error) {
-          console.error(`[LocalWhisperTranscriber] Error setting worker URL:`, error);
-        }
-        
-        // Provide locateFile to help Emscripten find other files if needed
-        moduleArg.locateFile = (path: string, scriptDirectory: string) => {
-          console.log(`[LocalWhisperTranscriber] locateFile called:`);
-          console.log(`  - path: "${path}"`);
-          console.log(`  - scriptDirectory: "${scriptDirectory}"`);
-          
-          const resolvedPath = scriptDirectory + path;
-          console.log(`  - Resolved path: "${resolvedPath}"`);
-          return resolvedPath;
-        };
-        
-        console.log("[LocalWhisperTranscriber] Calling original createModule with moduleArg:", Object.keys(moduleArg));
+        console.log("[LocalWhisperTranscriber] Creating WASM module in single-threaded mode");
         const module = await createModule(moduleArg);
-        console.log("[LocalWhisperTranscriber] createModule completed");
-        console.log("[LocalWhisperTranscriber] module.pthreadMainJs:", module.pthreadMainJs);
+        console.log("[LocalWhisperTranscriber] WASM module created successfully");
         return module;
       };
 
@@ -149,12 +123,6 @@ export class LocalWhisperTranscriber {
       console.log(`[LocalWhisperTranscriber] Audio file: ${audioFile.filename}`);
       console.log(`[LocalWhisperTranscriber] Audio data size: ${audioData.byteLength} bytes`);
       console.log(`[LocalWhisperTranscriber] Transcriber initialized: ${this.isInitialized}`);
-      
-      // Check if the module still has pthreadMainJs set
-      if (this.transcriber && (this.transcriber as any).Module) {
-        const module = (this.transcriber as any).Module;
-        console.log(`[LocalWhisperTranscriber] Module.pthreadMainJs: ${module.pthreadMainJs || 'NOT SET'}`);
-      }
 
       // Convert ArrayBuffer to File object for the transcriber
       const blob = new Blob([audioData], { type: `audio/${audioFile.extension.replace(".", "")}` });
@@ -163,11 +131,9 @@ export class LocalWhisperTranscriber {
       console.log(`[LocalWhisperTranscriber] Created audio file: ${file.name}, size: ${file.size}, type: ${file.type}`);
 
       // Transcribe using the FileTranscriber
-      // Note: Setting threads: 1 may not prevent worker creation during module init
-      console.log(`[LocalWhisperTranscriber] About to call transcriber.transcribe() with threads: 1`);
-      const result = await this.transcriber.transcribe(file, {
-        threads: 1,
-      });
+      // Running in single-threaded mode (no workers) for Obsidian/Electron compatibility
+      console.log(`[LocalWhisperTranscriber] About to call transcriber.transcribe() in single-threaded mode`);
+      const result = await this.transcriber.transcribe(file);
       
       console.log(`[LocalWhisperTranscriber] Transcribe call completed successfully`);
 
