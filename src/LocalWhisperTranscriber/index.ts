@@ -131,9 +131,9 @@ export class LocalWhisperTranscriber {
       console.log(`[LocalWhisperTranscriber] Created audio file: ${file.name}, size: ${file.size}, type: ${file.type}`);
 
       // Transcribe using the FileTranscriber
-      // Running in single-threaded mode (no workers) for Obsidian/Electron compatibility
-      console.log(`[LocalWhisperTranscriber] About to call transcriber.transcribe() in single-threaded mode`);
-      const result = await this.transcriber.transcribe(file);
+      // Use threads: 1 to force single-threaded execution and avoid worker creation
+      console.log(`[LocalWhisperTranscriber] About to call transcriber.transcribe() with threads=1 (single-threaded mode)`);
+      const result = await this.transcriber.transcribe(file, { threads: 1 });
       
       console.log(`[LocalWhisperTranscriber] Transcribe call completed successfully`);
 
