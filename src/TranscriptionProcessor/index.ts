@@ -25,6 +25,7 @@ import {
   PUBLIC_API_ENDPOINT,
 } from "../constants";
 import { Settings } from "../settings";
+import { WasmTranscriber } from "./WasmTranscriber";
 
 type TranscribedItem = {
   originalAudioFileName: string;
@@ -55,6 +56,7 @@ export class TranscriptionProcessor {
   private markdownProcessor: MarkdownProcessor;
   private audioProcessor: AudioProcessor;
   private queue: PQueue;
+  private wasmTranscriber: WasmTranscriber | null = null;
 
   public state: TranscriptionProcessorState;
   private subscribers: StateSubscriberMap = {};
@@ -75,6 +77,11 @@ export class TranscriptionProcessor {
 
     // Set initial state for the processor; which is fed into the StatusView UI.
     this.state = { running: !this.queue.isPaused, items: {} };
+
+    // Initialize WASM transcriber if enabled
+    if (settings.useWasmTranscription) {
+      this.initializeWasmTranscriber();
+    }
   }
 
   public async queueFile(audioFile: TranscriptionCandidate) {
@@ -122,7 +129,32 @@ export class TranscriptionProcessor {
     this.settings = settings;
     this.queue.clear();
 
+    // Re-initialize WASM transcriber if settings changed
+    if (settings.useWasmTranscription && !this.wasmTranscriber) {
+      this.initializeWasmTranscriber();
+    } else if (!settings.useWasmTranscription && this.wasmTranscriber) {
+      this.wasmTranscriber.dispose();
+      this.wasmTranscriber = null;
+    }
+
     this.notifySubscribers();
+  }
+
+  /**
+   * Initialize the WASM transcriber for local transcription.
+   */
+  private async initializeWasmTranscriber() {
+    try {
+      this.wasmTranscriber = new WasmTranscriber(this.app, this.settings, this.logger);
+      await this.wasmTranscriber.init();
+      this.logger.log("WASM transcriber initialized successfully");
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.log(`Failed to initialize WASM transcriber: ${errorMsg}`);
+      new Notice(`WASM transcription initialization failed: ${errorMsg}. Falling back to remote transcription.`);
+      this.wasmTranscriber = null;
+      // Don't throw - just fall back to remote transcription
+    }
   }
 
   /**
@@ -184,6 +216,22 @@ export class TranscriptionProcessor {
   }
 
   private async transcribe(audioFile: FileDetail): Promise<TranscriptionResponse | null> {
+    // Use WASM transcription if enabled and available
+    if (this.settings.useWasmTranscription && this.wasmTranscriber?.isReady()) {
+      console.debug(`[Transcription] Using WASM transcription for: ${audioFile.filename}`);
+      try {
+        return await this.wasmTranscriber.transcribe(audioFile);
+      } catch (error) {
+        console.warn(`[Transcription] WASM transcription failed, falling back to remote: ${error}`);
+        // Fall through to remote transcription
+      }
+    }
+
+    // Use remote transcription (either whisper.cpp server or public API)
+    return this.transcribeRemote(audioFile);
+  }
+
+  private async transcribeRemote(audioFile: FileDetail): Promise<TranscriptionResponse | null> {
     const host = this.settings.isSelfHosted ? this.settings.selfHostedEndpoint : PUBLIC_API_ENDPOINT;
 
     const url = `${host}/inference`;
