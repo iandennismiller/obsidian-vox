@@ -9,9 +9,7 @@ import { AudioOutputExtension } from "../../src/types";
 
 // Define the expected Settings interface for testing
 interface Settings {
-  apiKey: string;
-  isSelfHosted: boolean;
-  selfHostedEndpoint: string;
+  endpoint: string;
   recordingDeviceId: string | null;
   watchDirectory: string;
   outputDirectory: string;
@@ -30,9 +28,7 @@ interface Settings {
 
 // Expected default settings based on implementation
 const EXPECTED_DEFAULT_SETTINGS: Settings = {
-  apiKey: "",
-  isSelfHosted: false,
-  selfHostedEndpoint: "",
+  endpoint: "",
   recordingDeviceId: null,
   audioOutputExtension: AudioOutputExtension.MP3,
   outputDirectory: "Voice",
@@ -61,13 +57,11 @@ describe("Settings Structure", () => {
       expect(EXPECTED_DEFAULT_SETTINGS.temperatureInc).toBe("0.2");
     });
 
-    it("should have correct self-hosting defaults", () => {
-      expect(EXPECTED_DEFAULT_SETTINGS.isSelfHosted).toBe(false);
-      expect(EXPECTED_DEFAULT_SETTINGS.selfHostedEndpoint).toBe("");
+    it("should have correct endpoint defaults", () => {
+      expect(EXPECTED_DEFAULT_SETTINGS.endpoint).toBe("");
     });
 
     it("should have correct general defaults", () => {
-      expect(EXPECTED_DEFAULT_SETTINGS.apiKey).toBe("");
       expect(EXPECTED_DEFAULT_SETTINGS.recordingDeviceId).toBeNull();
       expect(EXPECTED_DEFAULT_SETTINGS.audioOutputExtension).toBe(
         AudioOutputExtension.MP3
@@ -122,24 +116,12 @@ describe("Settings Structure", () => {
       expect(settings.temperatureInc).toBe("0.5");
     });
 
-    it("should support self-hosted configuration", () => {
+    it("should support endpoint configuration", () => {
       const settings: Partial<Settings> = {
-        isSelfHosted: true,
-        selfHostedEndpoint: "http://127.0.0.1:8080",
+        endpoint: "http://127.0.0.1:8080",
       };
 
-      expect(settings.isSelfHosted).toBe(true);
-      expect(settings.selfHostedEndpoint).toBe("http://127.0.0.1:8080");
-    });
-
-    it("should support public API configuration", () => {
-      const settings: Partial<Settings> = {
-        isSelfHosted: false,
-        apiKey: "test-api-key",
-      };
-
-      expect(settings.isSelfHosted).toBe(false);
-      expect(settings.apiKey).toBe("test-api-key");
+      expect(settings.endpoint).toBe("http://127.0.0.1:8080");
     });
   });
 
@@ -171,13 +153,11 @@ describe("Settings Structure", () => {
       expect(typeof settings.temperatureInc).toBe("string");
     });
 
-    it("should have all required self-hosting fields", () => {
+    it("should have all required endpoint fields", () => {
       const settings: Settings = EXPECTED_DEFAULT_SETTINGS;
 
-      expect(settings).toHaveProperty("isSelfHosted");
-      expect(settings).toHaveProperty("selfHostedEndpoint");
-      expect(typeof settings.isSelfHosted).toBe("boolean");
-      expect(typeof settings.selfHostedEndpoint).toBe("string");
+      expect(settings).toHaveProperty("endpoint");
+      expect(typeof settings.endpoint).toBe("string");
     });
   });
 });
