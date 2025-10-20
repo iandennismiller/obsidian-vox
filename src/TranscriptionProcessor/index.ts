@@ -181,7 +181,7 @@ export class TranscriptionProcessor {
 
   private async processFile(audioFile: TranscriptionCandidate) {
     console.debug(`[Transcription] Processing file: ${audioFile.filename}`);
-    
+
     try {
       this.setCanditateStatus(audioFile, VoxStatusItemStatus.PROCESSING_AUDIO);
       console.debug(`[Transcription] Status: PROCESSING_AUDIO`);
@@ -237,7 +237,7 @@ export class TranscriptionProcessor {
     const url = `${host}/inference`;
 
     console.debug(`[Transcription] Starting transcription for: ${audioFile.filename}`);
-    console.debug(`[Transcription] Using ${this.settings.isSelfHosted ? 'self-hosted' : 'public'} endpoint: ${url}`);
+    console.debug(`[Transcription] Using ${this.settings.isSelfHosted ? "self-hosted" : "public"} endpoint: ${url}`);
 
     const mimetype = `audio/${audioFile.extension.replace(".", "")}`;
 
@@ -305,10 +305,12 @@ export class TranscriptionProcessor {
 
     // Check if segments field exists
     if (!response.data.segments) {
-      console.warn("[Transcription] Response missing 'segments' field - this may be expected for some whisper.cpp configurations");
+      console.warn(
+        "[Transcription] Response missing 'segments' field - this may be expected for some whisper.cpp configurations",
+      );
       console.warn("[Transcription] Available fields:", Object.keys(response.data));
       console.warn("[Transcription] Will create segments from text field");
-      
+
       // Create a single segment from the text if segments are missing
       response.data.segments = [
         {
@@ -322,7 +324,7 @@ export class TranscriptionProcessor {
           no_speech_prob: 0,
         },
       ];
-      
+
       console.debug("[Transcription] Created synthetic segment from text field");
     } else if (!Array.isArray(response.data.segments)) {
       console.warn("[Transcription] Segments field is not an array");
@@ -349,7 +351,7 @@ export class TranscriptionProcessor {
 
     // Increment retry count first
     this.incrementRetryCount(audioFile);
-    
+
     // Get the new retry count after incrementing
     const newRetryCount = currentRetryCount + 1;
 
@@ -362,7 +364,7 @@ export class TranscriptionProcessor {
       console.debug(`[Transcription] Error code:`, error.code);
       console.debug(`[Transcription] Response status:`, error.response?.status);
       console.debug(`[Transcription] Response data:`, error.response?.data);
-      
+
       if (error.response?.status === HttpStatusCode.TooManyRequests) {
         console.warn("[Transcription] Rate limit reached (429)");
         new Notice("You've reached your transcription limit for today.");
@@ -389,10 +391,10 @@ export class TranscriptionProcessor {
     // Calculate backoff delay using geometric progression: base * 2^retry_count
     // Use currentRetryCount (before increment) for delay calculation to start with base delay
     const delay = this.calculateBackoffDelay(currentRetryCount);
-    
+
     console.debug(`[Transcription] Scheduling retry in ${Math.round(delay / 1000)} seconds...`);
     this.logger.log(`Will retry "${audioFile.filename}" in ${Math.round(delay / 1000)} seconds...`);
-    
+
     // Set status back to QUEUED to indicate it will be retried
     this.setCanditateStatus(audioFile, VoxStatusItemStatus.QUEUED);
 

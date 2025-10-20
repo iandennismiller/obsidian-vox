@@ -589,7 +589,7 @@ export class VoxSettingTab extends PluginSettingTab {
       "This requires downloading a whisper model file (GGML format). ",
       description.createEl("br"),
       description.createEl("strong", { text: "Note: " }),
-      "When enabled, this takes priority over self-hosted and public API options."
+      "When enabled, this takes priority over self-hosted and public API options.",
     );
 
     new Setting(this.containerEl)
@@ -622,7 +622,7 @@ export class VoxSettingTab extends PluginSettingTab {
         text: "Hugging Face",
         href: "https://huggingface.co/ggerganov/whisper.cpp",
       }),
-      " or use whisper.cpp's download script."
+      " or use whisper.cpp's download script.",
     );
 
     const containerEl = this.containerEl.createEl("div", {
@@ -651,7 +651,7 @@ export class VoxSettingTab extends PluginSettingTab {
       description.createEl("strong", { text: "base" }),
       " for general use, ",
       description.createEl("strong", { text: "tiny" }),
-      " for quick notes."
+      " for quick notes.",
     );
 
     const containerEl = this.containerEl.createEl("div", {

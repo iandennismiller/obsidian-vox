@@ -8,7 +8,9 @@ The *unprocessed* directory is watched for new files; upon discovering a new fil
 
 ## Transcription Options
 
-**Self-Hosted (Recommended)**: Use [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for completely private, unlimited, and free transcription on your own machine. See [Self-Hosting with Whisper.cpp](#self-hosting-with-whisper.cpp) for setup instructions.
+**Embedded WASM (Recommended for Privacy)**: Use [whisper.cpp WASM](https://github.com/transcribejs/transcribe.js) for completely offline, browser-based transcription with no network requests. Your audio never leaves your device. See [Embedded WASM Transcription](#embedded-wasm-transcription) for setup instructions.
+
+**Self-Hosted (Recommended for Performance)**: Use [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for completely private, unlimited, and free transcription on your own machine. See [Self-Hosting with Whisper.cpp](#self-hosting-with-whisper.cpp) for setup instructions.
 
 **Public API**: For quick setup, use the public transcription service (limited to 100 transcriptions per day). Files are only held in memory as buffers and are not saved to disk on the server. No personal information is collected or processed.
 
@@ -114,6 +116,95 @@ Here is a list of example categories along with their prefixes...
 - PO - Political
 
 You may set your own categorization map in the settings - the sky's the limit!
+
+## Embedded WASM Transcription
+
+VOX now supports fully embedded, browser-based transcription using [whisper.cpp compiled to WebAssembly](https://github.com/transcribejs/transcribe.js). This option provides completely offline, privacy-focused transcription with **zero network requests**.
+
+### Benefits of Embedded WASM
+
+- 🔒 **Maximum Privacy**: Audio never leaves your browser
+- 🌐 **Fully Offline**: No internet required for transcription
+- 💰 **No Cost**: No subscription or API fees
+- 🚀 **Unlimited**: No daily transcription limits
+- ⚡ **Fast**: Runs in your browser using WebAssembly
+- 🎛️ **Portable**: Works on any device running Obsidian
+
+### Quick Start with WASM
+
+#### 1. Download a GGML Model
+
+Visit [Hugging Face whisper.cpp models](https://huggingface.co/ggerganov/whisper.cpp/tree/main) and download a model file:
+
+- **For English**: Download `ggml-base.en.bin` (recommended, ~140 MB)
+- **For Multilingual**: Download `ggml-base.bin` (~140 MB)
+- **For Fastest**: Download `ggml-tiny.en.bin` (~75 MB)
+
+#### 2. Place Model in Your Vault
+
+Create a models directory in your vault and place the downloaded model:
+
+```
+Your Vault/
+├── .obsidian/
+│   └── models/
+│       └── ggml-base.en.bin  ← Place model here
+└── ...
+```
+
+#### 3. Configure VOX
+
+1. Open Obsidian Settings → VOX
+2. Navigate to **"Transcription Backend"** section
+3. Enable **"Use Embedded WASM Transcription"**
+4. Set **"WASM Model File Path"** to: `.obsidian/models/ggml-base.en.bin`
+5. Select your **"Model Size"** to match the downloaded model
+
+#### 4. Start Transcribing
+
+Place audio files in your watch directory, and VOX will automatically transcribe them using WASM with no network requests!
+
+### Model Selection for WASM
+
+Choose a model based on your needs:
+
+| Model | Size | Speed | Quality | Best For |
+|-------|------|-------|---------|----------|
+| tiny.en  | ~75 MB | Fastest | Basic | Quick notes |
+| base.en  | ~140 MB | Fast | Good | General use ⭐ |
+| small.en | ~460 MB | Medium | Better | Higher quality |
+| medium.en | ~1.5 GB | Slow | Great | Professional work |
+| large-v3 | ~2.9 GB | Slowest | Best | Maximum quality |
+
+**Note**: Add `.en` suffix for English-only models (smaller and faster). Remove for multilingual support.
+
+### WASM vs Self-Hosted vs Public API
+
+| Feature | WASM | Self-Hosted | Public API |
+|---------|------|-------------|------------|
+| Privacy | ⭐⭐⭐ | ⭐⭐⭐ | ⭐ |
+| Speed | ⭐⭐ | ⭐⭐⭐ | ⭐ |
+| Setup | Easy | Moderate | Easiest |
+| Cost | Free | Free | Limited Free |
+| Offline | ✅ | ✅ | ❌ |
+| GPU Support | ❌ | ✅ | ✅ |
+
+### Troubleshooting WASM
+
+**Model Not Found**
+- Verify the model file path in settings
+- Ensure the model file is in your vault
+- Check file permissions
+
+**Slow Transcription**
+- Use a smaller model (tiny or base)
+- Close other browser tabs/applications
+- Ensure sufficient RAM is available
+
+**Quality Issues**
+- Use a larger model (small, medium, or large)
+- Ensure audio files are clear and well-recorded
+- Consider using self-hosted whisper.cpp for GPU acceleration
 
 ## Roadmap
 

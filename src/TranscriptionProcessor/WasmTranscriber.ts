@@ -37,7 +37,7 @@ export class WasmTranscriber {
     const modelExists = await this.app.vault.adapter.exists(this.settings.wasmModelPath);
     if (!modelExists) {
       throw new Error(
-        `WASM model file not found at: ${this.settings.wasmModelPath}. Please download a model file and update the path in settings.`
+        `WASM model file not found at: ${this.settings.wasmModelPath}. Please download a model file and update the path in settings.`,
       );
     }
 
