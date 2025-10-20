@@ -7,14 +7,10 @@ import { FolderSuggest } from "./suggesters/FolderSuggester";
 
 const TAG_SETTINGS_CLASS = "st-tag-setting";
 const CATEGORIZATION_SETTINGS_CLASS = "st-cate-setting";
-const SELF_HOSTING_CLASS = "self-host-setting";
 const HIDDEN_CLASS = "st-hidden";
 
 export interface Settings {
-  apiKey: string;
-
-  isSelfHosted: boolean;
-  selfHostedEndpoint: string;
+  endpoint: string;
 
   recordingDeviceId: string | null;
 
@@ -52,10 +48,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  apiKey: "",
-
-  isSelfHosted: false,
-  selfHostedEndpoint: "",
+  endpoint: "",
 
   recordingDeviceId: null,
 
@@ -107,6 +100,7 @@ export class VoxSettingTab extends PluginSettingTab {
 
     this.addCategoryHeading("Transcription Settings");
 
+    this.addBackendLocation();
     this.addWatchDirectory();
     this.addTranscriptionsDirectory();
 
@@ -124,8 +118,6 @@ export class VoxSettingTab extends PluginSettingTab {
 
     this.addCategoryHeading("File Watching Settings");
     this.addFileWatchingSettings();
-
-    this.addSelfHostToggle();
   }
 
   addCategoryHeading(category: string, margin = false): void {
@@ -550,22 +542,6 @@ export class VoxSettingTab extends PluginSettingTab {
     categoryMapSetting.infoEl.remove();
   }
 
-  addSelfHostToggle(): void {
-    new Setting(this.containerEl).setName("Use Self-Hosted Backend").addToggle((cb) => {
-      cb.setValue(this.plugin.settings.isSelfHosted);
-      cb.onChange((selfHosted) => {
-        this.plugin.settings.isSelfHosted = selfHosted;
-        this.plugin.saveSettings();
-
-        this.toggleSettingsVisibility(SELF_HOSTING_CLASS, selfHosted);
-      });
-    });
-
-    this.addSelfHostLocation();
-
-    this.toggleSettingsVisibility(SELF_HOSTING_CLASS, this.plugin.settings.isSelfHosted);
-  }
-
   addWhisperSettings(): void {
     new Setting(this.containerEl)
       .setName("Temperature")
@@ -698,43 +674,211 @@ export class VoxSettingTab extends PluginSettingTab {
       });
   }
 
-  addSelfHostLocation(): void {
+  addFileWatchingSettings(): void {
+    new Setting(this.containerEl)
+      .setName("File Stability Delay (ms)")
+      .setDesc("Wait this long after file size stops changing before processing. Ensures file is fully written.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "1000",
+          max: "30000",
+          step: "1000",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.fileStabilityDelayMs));
+        cb.onChange((value) => {
+          this.plugin.settings.fileStabilityDelayMs = parseInt(value) || 3000;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("File Stability Check Interval (ms)")
+      .setDesc(
+        "How often to check if file size has changed. Lower values detect changes faster but use more resources.",
+      )
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "500",
+          max: "5000",
+          step: "500",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.fileStabilityCheckIntervalMs));
+        cb.onChange((value) => {
+          this.plugin.settings.fileStabilityCheckIntervalMs = parseInt(value) || 1000;
+          this.plugin.saveSettings();
+        });
+      });
+  }
+
+  addBackendLocation(): void {
     const description = document.createDocumentFragment();
     description.append(
-      "The location of your self-hosted back-end; supports IP addresses and hostnames.",
+      "The location of your whisper.cpp backend; supports IP addresses and hostnames.",
       description.createEl("br"),
-      "Please remember to inclued your protocol; ",
-      description.createEl("code", { text: "https://", cls: "st-inline-code" }),
+      "Please remember to include your protocol; ",
+      description.createEl("code", { text: "http://", cls: "st-inline-code" }),
       "or",
       description.createEl("code", { text: "https://", cls: "st-inline-code" }),
       " and port; ",
-      description.createEl("code", { text: "1337", cls: "st-inline-code" }),
+      description.createEl("code", { text: "8080", cls: "st-inline-code" }),
       ".",
     );
 
-    const containerEl = this.containerEl.createEl("div", {
-      cls: [SELF_HOSTING_CLASS],
-    });
-
-    new Setting(containerEl)
-      .setName("Self Hosted Backend Location")
+    new Setting(this.containerEl)
+      .setName("Backend Location")
       .setDesc(description)
       .addText((cb) => {
-        if (!this.plugin.settings.selfHostedEndpoint.match(VALID_HOST_REGEX)) {
+        if (!this.plugin.settings.endpoint.match(VALID_HOST_REGEX)) {
           cb.inputEl.style.borderColor = "red";
         }
 
-        cb.setPlaceholder("http://10.0.0.1:1337");
-        cb.setValue(this.plugin.settings.selfHostedEndpoint);
+        cb.setPlaceholder("http://127.0.0.1:8080");
+        cb.setValue(this.plugin.settings.endpoint);
         cb.onChange((newHost) => {
           if (newHost.match(VALID_HOST_REGEX)) {
             cb.inputEl.style.borderColor = "unset";
 
-            this.plugin.settings.selfHostedEndpoint = newHost;
+            this.plugin.settings.endpoint = newHost;
             this.plugin.saveSettings();
           } else {
             cb.inputEl.style.borderColor = "red";
           }
+        });
+      });
+  }
+
+  addWhisperSettings(): void {
+    new Setting(this.containerEl)
+      .setName("Temperature")
+      .setDesc("Controls randomness in transcription. 0.0 is deterministic, higher values increase randomness.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "0.0",
+          max: "1.0",
+          step: "0.1",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(this.plugin.settings.temperature);
+        cb.onChange((value) => {
+          this.plugin.settings.temperature = value;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Temperature Increment")
+      .setDesc("Temperature increment for fallback when transcription fails. Used to retry with higher randomness.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "0.0",
+          max: "1.0",
+          step: "0.1",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(this.plugin.settings.temperatureInc);
+        cb.onChange((value) => {
+          this.plugin.settings.temperatureInc = value;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Maximum Retry Attempts")
+      .setDesc("Number of times to retry a failed transcription before giving up.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "0",
+          max: "10",
+          step: "1",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.maxRetries));
+        cb.onChange((value) => {
+          this.plugin.settings.maxRetries = parseInt(value) || 3;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Retry Base Delay (ms)")
+      .setDesc("Initial delay before first retry. Each retry doubles this delay (geometric backoff).")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "1000",
+          max: "60000",
+          step: "1000",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.retryBaseDelayMs));
+        cb.onChange((value) => {
+          this.plugin.settings.retryBaseDelayMs = parseInt(value) || 5000;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Retry Maximum Delay (ms)")
+      .setDesc("Maximum delay between retries. Caps the geometric backoff.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "10000",
+          max: "600000",
+          step: "10000",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.retryMaxDelayMs));
+        cb.onChange((value) => {
+          this.plugin.settings.retryMaxDelayMs = parseInt(value) || 300000;
+          this.plugin.saveSettings();
+        });
+      });
+  }
+
+  addFileWatchingSettings(): void {
+    new Setting(this.containerEl)
+      .setName("File Stability Delay (ms)")
+      .setDesc("Wait this long after file size stops changing before processing. Ensures file is fully written.")
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "1000",
+          max: "30000",
+          step: "1000",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.fileStabilityDelayMs));
+        cb.onChange((value) => {
+          this.plugin.settings.fileStabilityDelayMs = parseInt(value) || 3000;
+          this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(this.containerEl)
+      .setName("File Stability Check Interval (ms)")
+      .setDesc(
+        "How often to check if file size has changed. Lower values detect changes faster but use more resources.",
+      )
+      .addText((cb) => {
+        cb.inputEl.setAttrs({
+          type: "number",
+          min: "500",
+          max: "5000",
+          step: "500",
+        });
+        cb.inputEl.style.maxWidth = "8rem";
+        cb.setValue(String(this.plugin.settings.fileStabilityCheckIntervalMs));
+        cb.onChange((value) => {
+          this.plugin.settings.fileStabilityCheckIntervalMs = parseInt(value) || 1000;
+          this.plugin.saveSettings();
         });
       });
   }

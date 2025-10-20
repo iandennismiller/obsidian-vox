@@ -18,12 +18,7 @@ import {
 } from "types";
 import { extractFileDetail } from "utils/format";
 import { Logger } from "utils/log";
-import {
-  CACHE_DIRECTORY,
-  OBSIDIAN_API_KEY_HEADER_KEY,
-  OBSIDIAN_VAULT_ID_HEADER_KEY,
-  PUBLIC_API_ENDPOINT,
-} from "../constants";
+import { CACHE_DIRECTORY } from "../constants";
 import { Settings } from "../settings";
 
 type TranscribedItem = {
@@ -184,12 +179,10 @@ export class TranscriptionProcessor {
   }
 
   private async transcribe(audioFile: FileDetail): Promise<TranscriptionResponse | null> {
-    const host = this.settings.isSelfHosted ? this.settings.selfHostedEndpoint : PUBLIC_API_ENDPOINT;
-
-    const url = `${host}/inference`;
+    const url = `${this.settings.endpoint}/inference`;
 
     console.debug(`[Transcription] Starting transcription for: ${audioFile.filename}`);
-    console.debug(`[Transcription] Using ${this.settings.isSelfHosted ? 'self-hosted' : 'public'} endpoint: ${url}`);
+    console.debug(`[Transcription] Using endpoint: ${url}`);
 
     const mimetype = `audio/${audioFile.extension.replace(".", "")}`;
 
@@ -212,12 +205,6 @@ export class TranscriptionProcessor {
     const headers: Record<string, string> = {
       "Content-Type": "multipart/form-data",
     };
-
-    // Only add API keys if using the public endpoint
-    if (!this.settings.isSelfHosted) {
-      headers[OBSIDIAN_VAULT_ID_HEADER_KEY] = this.app.appId;
-      headers[OBSIDIAN_API_KEY_HEADER_KEY] = this.settings.apiKey;
-    }
 
     console.debug(`[Transcription] Sending request to: ${url}`);
     console.debug(`[Transcription] Request payload:`, {
