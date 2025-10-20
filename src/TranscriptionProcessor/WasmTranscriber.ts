@@ -8,6 +8,11 @@ import { Logger } from "utils/log";
 /**
  * Handles WASM-based transcription using whisper.cpp compiled to WASM.
  * This allows for fully local, offline transcription without any network requests.
+ * 
+ * Note: whisper.cpp WASM is multithreaded and may use Web Workers. In Electron environments,
+ * optimal performance requires `nodeIntegrationInWorker: true` in webPreferences. Since
+ * Obsidian controls the Electron configuration, if WASM fails to initialize or perform,
+ * the plugin will automatically fall back to remote transcription methods.
  */
 export class WasmTranscriber {
   private transcriber: FileTranscriber | null = null;

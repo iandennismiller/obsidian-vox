@@ -196,6 +196,12 @@ Choose a model based on your needs:
 - Ensure the model file is in your vault
 - Check file permissions
 
+**WASM Initialization Issues**
+- WASM transcription uses whisper.cpp which is multithreaded
+- In Electron environments, optimal WASM/Web Worker support requires `nodeIntegrationInWorker: true`
+- As a plugin, we cannot control Obsidian's Electron configuration
+- If WASM fails, the plugin automatically falls back to remote transcription (self-hosted or public API)
+
 **Slow Transcription**
 - Use a smaller model (tiny or base)
 - Close other browser tabs/applications

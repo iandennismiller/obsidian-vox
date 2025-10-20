@@ -13,6 +13,12 @@ Embedded WASM transcription allows you to transcribe audio files completely offl
 - At least 500MB of free disk space for model files
 - Sufficient RAM for the model size you choose (2GB minimum recommended)
 
+### Electron Environment Note
+
+This plugin runs in Obsidian's Electron environment. The @transcribe/shout library uses whisper.cpp compiled to WebAssembly, which is multithreaded. In Electron, for Web Workers to use Node.js features (which may be required for optimal WASM performance), the `nodeIntegrationInWorker` option should be set to `true` in webPreferences.
+
+**Note:** As a plugin, we cannot control Obsidian's Electron configuration. If you experience issues with WASM transcription, this may be due to Obsidian's Electron settings. In such cases, the plugin will automatically fall back to remote transcription methods (self-hosted or public API).
+
 ## Step-by-Step Setup
 
 ### 1. Download a Whisper Model
@@ -88,6 +94,8 @@ WASM transcription runs in your browser and is slower than GPU-accelerated trans
 **Slow transcription**: Use a smaller model or consider self-hosted whisper.cpp for GPU acceleration
 
 **Quality issues**: Use a larger model or ensure clear audio recordings
+
+**WASM initialization fails**: If WASM transcription fails to initialize, this may be due to Electron environment limitations. Obsidian's Electron configuration may need `nodeIntegrationInWorker: true` for optimal WASM/Web Worker support. The plugin will automatically fall back to remote transcription methods in this case.
 
 ## FAQ
 
