@@ -25,6 +25,7 @@ import {
   PUBLIC_API_ENDPOINT,
 } from "../constants";
 import { Settings } from "../settings";
+import { WasmTranscriber } from "./WasmTranscriber";
 
 type TranscribedItem = {
   originalAudioFileName: string;
@@ -55,6 +56,7 @@ export class TranscriptionProcessor {
   private markdownProcessor: MarkdownProcessor;
   private audioProcessor: AudioProcessor;
   private queue: PQueue;
+  private wasmTranscriber: WasmTranscriber | null = null;
 
   public state: TranscriptionProcessorState;
   private subscribers: StateSubscriberMap = {};
@@ -75,6 +77,11 @@ export class TranscriptionProcessor {
 
     // Set initial state for the processor; which is fed into the StatusView UI.
     this.state = { running: !this.queue.isPaused, items: {} };
+
+    // Initialize WASM transcriber if enabled
+    if (settings.useWasmTranscription) {
+      this.initializeWasmTranscriber();
+    }
   }
 
   public async queueFile(audioFile: TranscriptionCandidate) {
@@ -122,7 +129,32 @@ export class TranscriptionProcessor {
     this.settings = settings;
     this.queue.clear();
 
+    // Re-initialize WASM transcriber if settings changed
+    if (settings.useWasmTranscription && !this.wasmTranscriber) {
+      this.initializeWasmTranscriber();
+    } else if (!settings.useWasmTranscription && this.wasmTranscriber) {
+      this.wasmTranscriber.dispose();
+      this.wasmTranscriber = null;
+    }
+
     this.notifySubscribers();
+  }
+
+  /**
+   * Initialize the WASM transcriber for local transcription.
+   */
+  private async initializeWasmTranscriber() {
+    try {
+      this.wasmTranscriber = new WasmTranscriber(this.app, this.settings, this.logger);
+      await this.wasmTranscriber.init();
+      this.logger.log("WASM transcriber initialized successfully");
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.log(`Failed to initialize WASM transcriber: ${errorMsg}`);
+      new Notice(`WASM transcription initialization failed: ${errorMsg}. Falling back to remote transcription.`);
+      this.wasmTranscriber = null;
+      // Don't throw - just fall back to remote transcription
+    }
   }
 
   /**
@@ -149,7 +181,7 @@ export class TranscriptionProcessor {
 
   private async processFile(audioFile: TranscriptionCandidate) {
     console.debug(`[Transcription] Processing file: ${audioFile.filename}`);
-    
+
     try {
       this.setCanditateStatus(audioFile, VoxStatusItemStatus.PROCESSING_AUDIO);
       console.debug(`[Transcription] Status: PROCESSING_AUDIO`);
@@ -184,12 +216,28 @@ export class TranscriptionProcessor {
   }
 
   private async transcribe(audioFile: FileDetail): Promise<TranscriptionResponse | null> {
+    // Use WASM transcription if enabled and available
+    if (this.settings.useWasmTranscription && this.wasmTranscriber?.isReady()) {
+      console.debug(`[Transcription] Using WASM transcription for: ${audioFile.filename}`);
+      try {
+        return await this.wasmTranscriber.transcribe(audioFile);
+      } catch (error) {
+        console.warn(`[Transcription] WASM transcription failed, falling back to remote: ${error}`);
+        // Fall through to remote transcription
+      }
+    }
+
+    // Use remote transcription (either whisper.cpp server or public API)
+    return this.transcribeRemote(audioFile);
+  }
+
+  private async transcribeRemote(audioFile: FileDetail): Promise<TranscriptionResponse | null> {
     const host = this.settings.isSelfHosted ? this.settings.selfHostedEndpoint : PUBLIC_API_ENDPOINT;
 
     const url = `${host}/inference`;
 
     console.debug(`[Transcription] Starting transcription for: ${audioFile.filename}`);
-    console.debug(`[Transcription] Using ${this.settings.isSelfHosted ? 'self-hosted' : 'public'} endpoint: ${url}`);
+    console.debug(`[Transcription] Using ${this.settings.isSelfHosted ? "self-hosted" : "public"} endpoint: ${url}`);
 
     const mimetype = `audio/${audioFile.extension.replace(".", "")}`;
 
@@ -257,10 +305,12 @@ export class TranscriptionProcessor {
 
     // Check if segments field exists
     if (!response.data.segments) {
-      console.warn("[Transcription] Response missing 'segments' field - this may be expected for some whisper.cpp configurations");
+      console.warn(
+        "[Transcription] Response missing 'segments' field - this may be expected for some whisper.cpp configurations",
+      );
       console.warn("[Transcription] Available fields:", Object.keys(response.data));
       console.warn("[Transcription] Will create segments from text field");
-      
+
       // Create a single segment from the text if segments are missing
       response.data.segments = [
         {
@@ -274,7 +324,7 @@ export class TranscriptionProcessor {
           no_speech_prob: 0,
         },
       ];
-      
+
       console.debug("[Transcription] Created synthetic segment from text field");
     } else if (!Array.isArray(response.data.segments)) {
       console.warn("[Transcription] Segments field is not an array");
@@ -301,7 +351,7 @@ export class TranscriptionProcessor {
 
     // Increment retry count first
     this.incrementRetryCount(audioFile);
-    
+
     // Get the new retry count after incrementing
     const newRetryCount = currentRetryCount + 1;
 
@@ -314,7 +364,7 @@ export class TranscriptionProcessor {
       console.debug(`[Transcription] Error code:`, error.code);
       console.debug(`[Transcription] Response status:`, error.response?.status);
       console.debug(`[Transcription] Response data:`, error.response?.data);
-      
+
       if (error.response?.status === HttpStatusCode.TooManyRequests) {
         console.warn("[Transcription] Rate limit reached (429)");
         new Notice("You've reached your transcription limit for today.");
@@ -341,10 +391,10 @@ export class TranscriptionProcessor {
     // Calculate backoff delay using geometric progression: base * 2^retry_count
     // Use currentRetryCount (before increment) for delay calculation to start with base delay
     const delay = this.calculateBackoffDelay(currentRetryCount);
-    
+
     console.debug(`[Transcription] Scheduling retry in ${Math.round(delay / 1000)} seconds...`);
     this.logger.log(`Will retry "${audioFile.filename}" in ${Math.round(delay / 1000)} seconds...`);
-    
+
     // Set status back to QUEUED to indicate it will be retried
     this.setCanditateStatus(audioFile, VoxStatusItemStatus.QUEUED);
 

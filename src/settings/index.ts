@@ -8,6 +8,7 @@ import { FolderSuggest } from "./suggesters/FolderSuggester";
 const TAG_SETTINGS_CLASS = "st-tag-setting";
 const CATEGORIZATION_SETTINGS_CLASS = "st-cate-setting";
 const SELF_HOSTING_CLASS = "self-host-setting";
+const WASM_SETTINGS_CLASS = "wasm-setting";
 const HIDDEN_CLASS = "st-hidden";
 
 export interface Settings {
@@ -15,6 +16,11 @@ export interface Settings {
 
   isSelfHosted: boolean;
   selfHostedEndpoint: string;
+
+  // WASM transcription settings
+  useWasmTranscription: boolean;
+  wasmModelPath: string;
+  wasmModelSize: "tiny" | "base" | "small" | "medium" | "large";
 
   recordingDeviceId: string | null;
 
@@ -56,6 +62,11 @@ export const DEFAULT_SETTINGS: Settings = {
 
   isSelfHosted: false,
   selfHostedEndpoint: "",
+
+  // WASM transcription defaults
+  useWasmTranscription: false,
+  wasmModelPath: "",
+  wasmModelSize: "base",
 
   recordingDeviceId: null,
 
@@ -118,6 +129,10 @@ export class VoxSettingTab extends PluginSettingTab {
 
     this.addTags();
     this.addCategorisation();
+
+    this.addCategoryHeading("Transcription Backend");
+    this.addWasmTranscriptionSettings();
+    this.addSelfHostToggle();
 
     this.addCategoryHeading("Whisper Settings");
     this.addWhisperSettings();
@@ -564,6 +579,129 @@ export class VoxSettingTab extends PluginSettingTab {
     this.addSelfHostLocation();
 
     this.toggleSettingsVisibility(SELF_HOSTING_CLASS, this.plugin.settings.isSelfHosted);
+  }
+
+  addWasmTranscriptionSettings(): void {
+    const description = document.createDocumentFragment();
+    description.append(
+      "Use embedded WASM transcription for completely local, offline transcription. ",
+      description.createEl("br"),
+      "This requires downloading a whisper model file (GGML format). ",
+      description.createEl("br"),
+      description.createEl("strong", { text: "Note: " }),
+      "When enabled, this takes priority over self-hosted and public API options.",
+    );
+
+    new Setting(this.containerEl)
+      .setName("Use Embedded WASM Transcription")
+      .setDesc(description)
+      .addToggle((cb) => {
+        cb.setValue(this.plugin.settings.useWasmTranscription);
+        cb.onChange((useWasm) => {
+          this.plugin.settings.useWasmTranscription = useWasm;
+          this.plugin.saveSettings();
+
+          this.toggleSettingsVisibility(WASM_SETTINGS_CLASS, useWasm);
+        });
+      });
+
+    this.addWasmModelPath();
+    this.addWasmModelSize();
+    this.addWasmModelDownloadInfo();
+
+    this.toggleSettingsVisibility(WASM_SETTINGS_CLASS, this.plugin.settings.useWasmTranscription);
+  }
+
+  addWasmModelPath(): void {
+    const description = document.createDocumentFragment();
+    description.append(
+      "Path to the GGML model file within your vault. ",
+      description.createEl("br"),
+      "Download models from: ",
+      description.createEl("a", {
+        text: "Hugging Face",
+        href: "https://huggingface.co/ggerganov/whisper.cpp",
+      }),
+      " or use whisper.cpp's download script.",
+    );
+
+    const containerEl = this.containerEl.createEl("div", {
+      cls: [WASM_SETTINGS_CLASS],
+    });
+
+    new Setting(containerEl)
+      .setName("WASM Model File Path")
+      .setDesc(description)
+      .addText((cb) => {
+        cb.setPlaceholder(".obsidian/models/ggml-base.en.bin");
+        cb.setValue(this.plugin.settings.wasmModelPath);
+        cb.onChange((path) => {
+          this.plugin.settings.wasmModelPath = path;
+          this.plugin.saveSettings();
+        });
+      });
+  }
+
+  addWasmModelSize(): void {
+    const description = document.createDocumentFragment();
+    description.append(
+      "Select the model size. Larger models are more accurate but slower. ",
+      description.createEl("br"),
+      "Recommended: ",
+      description.createEl("strong", { text: "base" }),
+      " for general use, ",
+      description.createEl("strong", { text: "tiny" }),
+      " for quick notes.",
+    );
+
+    const containerEl = this.containerEl.createEl("div", {
+      cls: [WASM_SETTINGS_CLASS],
+    });
+
+    new Setting(containerEl)
+      .setName("Model Size")
+      .setDesc(description)
+      .addDropdown((cb) => {
+        cb.addOption("tiny", "Tiny (~75 MB, fastest)");
+        cb.addOption("base", "Base (~140 MB, recommended)");
+        cb.addOption("small", "Small (~460 MB, better quality)");
+        cb.addOption("medium", "Medium (~1.5 GB, high quality)");
+        cb.addOption("large", "Large (~2.9 GB, best quality)");
+
+        cb.setValue(this.plugin.settings.wasmModelSize);
+        cb.onChange((size: "tiny" | "base" | "small" | "medium" | "large") => {
+          this.plugin.settings.wasmModelSize = size;
+          this.plugin.saveSettings();
+        });
+      });
+  }
+
+  addWasmModelDownloadInfo(): void {
+    const containerEl = this.containerEl.createEl("div", {
+      cls: [WASM_SETTINGS_CLASS, "st-wasm-info"],
+    });
+
+    const infoEl = containerEl.createEl("div", {
+      cls: "setting-item-description",
+    });
+
+    infoEl.createEl("strong", { text: "Download Instructions:" });
+    infoEl.createEl("br");
+    infoEl.append("1. Visit ");
+    infoEl.createEl("a", {
+      text: "Hugging Face whisper.cpp models",
+      href: "https://huggingface.co/ggerganov/whisper.cpp/tree/main",
+    });
+    infoEl.createEl("br");
+    infoEl.append("2. Download a model file (e.g., ggml-base.en.bin for English)");
+    infoEl.createEl("br");
+    infoEl.append("3. Place it in your vault (recommended: .obsidian/models/)");
+    infoEl.createEl("br");
+    infoEl.append("4. Set the path above to point to the model file");
+    infoEl.createEl("br");
+    infoEl.createEl("br");
+    infoEl.createEl("strong", { text: "Note: " });
+    infoEl.append("WASM transcription runs entirely in your browser with no network requests.");
   }
 
   addWhisperSettings(): void {

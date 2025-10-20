@@ -11,6 +11,12 @@ importers:
       '@popperjs/core':
         specifier: ^2.11.8
         version: 2.11.8
+      '@transcribe/shout':
+        specifier: ^1.0.6
+        version: 1.0.6
+      '@transcribe/transcriber':
+        specifier: ^3.0.0
+        version: 3.0.0(@transcribe/shout@1.0.6)
       '@wasm-audio-decoders/flac':
         specifier: ^0.2.8
         version: 0.2.8
@@ -114,6 +120,9 @@ importers:
       jest:
         specifier: ^30.2.0
         version: 30.2.0(@types/node@20.2.5)(ts-node@9.1.1(typescript@4.9.5))
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
       standard-version:
         specifier: ^9.5.0
         version: 9.5.0
@@ -511,6 +520,14 @@ packages:
   '@testing-library/jest-dom@6.9.1':
     resolution: {integrity: sha512-zIcONa+hVtVSSep9UT3jZ5rizo2BsxgyDYU7WFD5eICBE7no3881HGeb/QkGfsJs6JTkY1aQhT7rIPC7e+0nnA==}
     engines: {node: '>=14', npm: '>=6', yarn: '>=1'}
+
+  '@transcribe/shout@1.0.6':
+    resolution: {integrity: sha512-/CiHzeUMygtpjZ1OUonUzE8gYsIyF0dD2uFDe5dfEOTFkU5GCZsEKsE/+QlF0T4d63dPgyceK0ooeP00HPKfBA==}
+
+  '@transcribe/transcriber@3.0.0':
+    resolution: {integrity: sha512-sLFYRWDgcUhvinyHsjv6du7rIG4/kmKTFQvxswJKFhSVT+S9zLtKasQacjyo3XAcJ9kLFQB08Q8kxDYbDbSEvg==}
+    peerDependencies:
+      '@transcribe/shout': ~1.0.6
 
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
@@ -2171,6 +2188,11 @@ packages:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
 
+  prettier@3.6.2:
+    resolution: {integrity: sha512-I7AIg5boAr5R0FFtJ6rCfD+LFsWHp81dolrFD8S79U9tb8Az2nGrJncnMSnys+bpQJfRUzqs9hnA81OAA3hCuQ==}
+    engines: {node: '>=14'}
+    hasBin: true
+
   pretty-format@30.2.0:
     resolution: {integrity: sha512-9uBdv/B4EefsuAL+pWqueZyZS2Ba+LxfFeQ9DN14HU4bN8bhaxKdkpjpB6fs9+pSjIBu+FXQHImEg8j/Lw0+vA==}
     engines: {node: ^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0}
@@ -3190,6 +3212,12 @@ snapshots:
       dom-accessibility-api: 0.6.3
       picocolors: 1.1.1
       redent: 3.0.0
+
+  '@transcribe/shout@1.0.6': {}
+
+  '@transcribe/transcriber@3.0.0(@transcribe/shout@1.0.6)':
+    dependencies:
+      '@transcribe/shout': 1.0.6
 
   '@tybys/wasm-util@0.10.1':
     dependencies:
@@ -5020,6 +5048,8 @@ snapshots:
       find-up: 4.1.0
 
   prelude-ls@1.2.1: {}
+
+  prettier@3.6.2: {}
 
   pretty-format@30.2.0:
     dependencies:
