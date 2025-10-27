@@ -13,6 +13,7 @@ node_modules
 main.js
 main.test.js
 *.js.map
+shout.wasm.worker.mjs
 
 # test
 test/

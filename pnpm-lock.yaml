@@ -11,6 +11,12 @@ importers:
       '@popperjs/core':
         specifier: ^2.11.8
         version: 2.11.8
+      '@transcribe/shout':
+        specifier: ^1.0.6
+        version: 1.0.6
+      '@transcribe/transcriber':
+        specifier: ^3.0.0
+        version: 3.0.0(@transcribe/shout@1.0.6)
       '@wasm-audio-decoders/flac':
         specifier: ^0.2.8
         version: 0.2.8
@@ -511,6 +517,14 @@ packages:
   '@testing-library/jest-dom@6.9.1':
     resolution: {integrity: sha512-zIcONa+hVtVSSep9UT3jZ5rizo2BsxgyDYU7WFD5eICBE7no3881HGeb/QkGfsJs6JTkY1aQhT7rIPC7e+0nnA==}
     engines: {node: '>=14', npm: '>=6', yarn: '>=1'}
+
+  '@transcribe/shout@1.0.6':
+    resolution: {integrity: sha512-/CiHzeUMygtpjZ1OUonUzE8gYsIyF0dD2uFDe5dfEOTFkU5GCZsEKsE/+QlF0T4d63dPgyceK0ooeP00HPKfBA==}
+
+  '@transcribe/transcriber@3.0.0':
+    resolution: {integrity: sha512-sLFYRWDgcUhvinyHsjv6du7rIG4/kmKTFQvxswJKFhSVT+S9zLtKasQacjyo3XAcJ9kLFQB08Q8kxDYbDbSEvg==}
+    peerDependencies:
+      '@transcribe/shout': ~1.0.6
 
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
@@ -3190,6 +3204,12 @@ snapshots:
       dom-accessibility-api: 0.6.3
       picocolors: 1.1.1
       redent: 3.0.0
+
+  '@transcribe/shout@1.0.6': {}
+
+  '@transcribe/transcriber@3.0.0(@transcribe/shout@1.0.6)':
+    dependencies:
+      '@transcribe/shout': 1.0.6
 
   '@tybys/wasm-util@0.10.1':
     dependencies:
